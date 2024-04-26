@@ -12,8 +12,10 @@ from pydrake.all import (
     Simulator,
     StartMeshcat,
     namedview,
+    JointSliders
 )
 from pydrake.examples import QuadrotorGeometry, QuadrotorPlant, StabilizingLQRController
+from underactuated.scenarios import AddFloatingRpyJoint
 
 import numpy as np
 import os
@@ -49,12 +51,12 @@ parser = Parser(plant)
 # # QuadrotorPlant, we can manually add a FloatingRollPitchYaw joint. We set
 # # `use_ball_rpy` to false because the BallRpyJoint uses angular velocities
 # # instead of ṙ, ṗ, ẏ.
-# AddFloatingRpyJoint(
-#     plant,
-#     plant.GetFrameByName("base_link"),
-#     model_instance,
-#     use_ball_rpy=False,
-# )
+AddFloatingRpyJoint(
+    plant,
+    plant.GetFrameByName("base_link"),
+    model_instance,
+    use_ball_rpy=False,
+)
 plant.Finalize()
 
 # Default parameters from quadrotor_plant.cc:
@@ -81,6 +83,8 @@ builder.Connect(
 )
 builder.ExportInput(propellers.get_command_input_port(), "u")
 
+
+
 ### Finalizing diagram setup
 diagram = builder.Build()
 context = diagram.CreateDefaultContext()
@@ -89,15 +93,31 @@ diagram_visualize_connections(diagram, "diagram.svg")
 
 
 
+# We'll use a namedview to make it easier to work with the state.
+StateView = namedview("state", plant.GetStateNames(False))
+
+# Create the LQR controller
+nominal_state = StateView.Zero()
+nominal_state.z_x = 1.0  # height is 1.0m
+context.SetContinuousState(nominal_state[:])
+mass = plant.CalcTotalMass(plant.GetMyContextFromRoot(context))
+gravity = plant.gravity_field().gravity_vector()[2]
+nominal_input = [-mass * gravity / 4] * 4
+
+
+
 ########################
 ### Simulation Setup ###
 ########################
 simulator = Simulator(diagram)
 simulator_context = simulator.get_mutable_context()
-plant_context = plant.GetMyMutableContextFromRoot(simulator_context)
+plant_context = plant.GetMyContextFromRoot(simulator_context)
+propellers_context = propellers.GetMyMutableContextFromRoot(simulator_context)
 
-plant_context.SetContinuousState(rng.random((13,)))
-diagram.GetInputPort("u").FixValue(simulator_context, np.ones(4))  # TESTING
+diagram.GetInputPort("u").FixValue(simulator_context, nominal_input)
+
+# plant_context.SetContinuousState(rng.random((12,)))
+# diagram.GetInputPort("u").FixValue(simulator_context, np.ones(4)*0.1)  # TESTING
 
 
 
@@ -109,7 +129,6 @@ simulator.set_target_realtime_rate(1)
 simulator.set_publish_every_time_step(True)
 
 meshcat.StartRecording()
-simulator.Initialize()
 simulator.AdvanceTo(5)
 meshcat.PublishRecording()
 

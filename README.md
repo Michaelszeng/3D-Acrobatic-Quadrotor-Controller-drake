@@ -11,5 +11,6 @@ Our recommended setup requires using a Linux machine, or using WSL2 on Windows, 
 Necessary installs:
 
     `pip install manipulation`
+    `pip install underactuated`
     `pip install ipython`
     `pip install pyvirtualdisplay`
