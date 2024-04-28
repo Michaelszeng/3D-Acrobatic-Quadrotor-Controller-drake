@@ -6,9 +6,12 @@ from pydrake.all import (
     Parser,
     Propeller,
     PropellerInfo,
+    RollPitchYaw,
     RigidTransform,
     RobotDiagramBuilder,
+    ConstantVectorSource,
     SceneGraph,
+    AddMultibodyPlantSceneGraph,
     Simulator,
     StartMeshcat,
     namedview,
@@ -27,110 +30,81 @@ from src.utils import (
     diagram_visualize_connections,
 )
 
-rng = np.random.default_rng(seed=7)
+MASS = 0.775  # quadrotor mass
 
-#####################
-### Meshcat Setup ###
-#####################
+# Start Meshcat visualizer server.
 meshcat = StartMeshcat()
-meshcat.AddButton("Close")
 
-
-
-#####################
-### Diagram Setup ###
-#####################
+# Create a diagram builder.
 builder = DiagramBuilder()
-plant = builder.AddSystem(MultibodyPlant(0.0))
+
+# Create the MultibodyPlant and the SceneGraph.
+plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.0)
 parser = Parser(plant)
 (model_instance,) = parser.AddModelsFromUrl(
     "package://drake/examples/quadrotor/quadrotor.urdf"
 )
 
-# # By default the multibody has a quaternion floating base.  To match
-# # QuadrotorPlant, we can manually add a FloatingRollPitchYaw joint. We set
-# # `use_ball_rpy` to false because the BallRpyJoint uses angular velocities
-# # instead of ṙ, ṗ, ẏ.
+# Set up the floating base type for the quadrotor.
 AddFloatingRpyJoint(
     plant,
     plant.GetFrameByName("base_link"),
     model_instance,
-    use_ball_rpy=False,
+    use_ball_rpy=False
 )
 plant.Finalize()
 
-# Default parameters from quadrotor_plant.cc:
-L = 0.15        # Length of the arms (m).
-kF = 1.0        # Force input constant.
-kM = 0.0245     # Moment input constant.
-
-base_body_index = plant.GetBodyByName("base_link").index()
-# Note: Rotors 0 and 2 rotate one way and rotors 1 and 3 rotate the other.
+# Set up the propellers.
+body_index = plant.GetBodyByName("base_link").index()
+L = 0.15  # Length of the arms (m).
+kF = 1.0  # Force input constant.
+kM = 0.0245  # Moment input constant.
 prop_info = [
-    PropellerInfo(base_body_index, RigidTransform([L, 0, 0]), kF, kM),
-    PropellerInfo(base_body_index, RigidTransform([0, L, 0]), kF, -kM),
-    PropellerInfo(base_body_index, RigidTransform([-L, 0, 0]), kF, kM),
-    PropellerInfo(base_body_index, RigidTransform([0, -L, 0]), kF, -kM),
+    PropellerInfo(body_index, RigidTransform([L, 0, 0]), kF, kM),
+    PropellerInfo(body_index, RigidTransform([0, L, 0]), kF, -kM),
+    PropellerInfo(body_index, RigidTransform([-L, 0, 0]), kF, kM),
+    PropellerInfo(body_index, RigidTransform([0, -L, 0]), kF, -kM),
 ]
 propellers = builder.AddSystem(Propeller(prop_info))
+
+# Connect the propellers to the plant.
 builder.Connect(
     propellers.get_output_port(),
-    plant.get_applied_spatial_force_input_port(),
+    plant.get_applied_spatial_force_input_port()
 )
 builder.Connect(
     plant.get_body_poses_output_port(),
-    propellers.get_body_poses_input_port(),
+    propellers.get_body_poses_input_port()
 )
-builder.ExportInput(propellers.get_command_input_port(), "u")
 
 
-
-### Finalizing diagram setup
-diagram = builder.Build()
-context = diagram.CreateDefaultContext()
-diagram.set_name("3D-Acrobatic-Quadrotor-Controller")
-diagram_visualize_connections(diagram, "diagram.svg")
-
-
-
-# We'll use a namedview to make it easier to work with the state.
-StateView = namedview("state", plant.GetStateNames(False))
-
-# Create the LQR controller
-nominal_state = StateView.Zero()
-nominal_state.z_x = 1.0  # height is 1.0m
-context.SetContinuousState(nominal_state[:])
-mass = plant.CalcTotalMass(plant.GetMyContextFromRoot(context))
+### TEMPORARY: CONSTANT CONTROL INPUT = mg ###
 gravity = plant.gravity_field().gravity_vector()[2]
-nominal_input = [-mass * gravity / 4] * 4
+constant_thrust_command = [-MASS * gravity / 4] * 4
+constant_input_source = builder.AddSystem(ConstantVectorSource(constant_thrust_command))
+builder.Connect(constant_input_source.get_output_port(), propellers.get_command_input_port())
+##############################################
 
+MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
 
-
-########################
-### Simulation Setup ###
-########################
+# Build the diagram and create a simulator.
+diagram = builder.Build()
+diagram_visualize_connections(diagram, "diagram.svg")
 simulator = Simulator(diagram)
-simulator_context = simulator.get_mutable_context()
-plant_context = plant.GetMyContextFromRoot(simulator_context)
-propellers_context = propellers.GetMyMutableContextFromRoot(simulator_context)
+context = simulator.get_mutable_context()
+plant_context = plant.GetMyMutableContextFromRoot(context)
 
-diagram.GetInputPort("u").FixValue(simulator_context, nominal_input)
+# Set initial state
+# plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("base_link"), RigidTransform([0, 0, 1]))
+plant.GetJointByName("rx").set_angle(plant_context, 0.0)  # Roll
+plant.GetJointByName("ry").set_angle(plant_context, 0.1)  # Pitch
+plant.GetJointByName("rz").set_angle(plant_context, 0.0)  # Yaw
+plant.GetJointByName("x").set_translation(plant_context, -1.5)
+plant.GetJointByName("y").set_translation(plant_context, 0.0)
+plant.GetJointByName("z").set_translation(plant_context, 1.0)
 
-# plant_context.SetContinuousState(rng.random((12,)))
-# diagram.GetInputPort("u").FixValue(simulator_context, np.ones(4)*0.1)  # TESTING
-
-
-
-####################################
-### Running Simulation & Meshcat ###
-####################################
-
-simulator.set_target_realtime_rate(1)
-simulator.set_publish_every_time_step(True)
-
+# Run the simulation
 meshcat.StartRecording()
-simulator.AdvanceTo(5)
+simulator.set_target_realtime_rate(1.0)
+simulator.AdvanceTo(4)  # Simulate for 10 seconds
 meshcat.PublishRecording()
-
-while not meshcat.GetButtonClicks("Close"):
-    pass
