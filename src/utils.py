@@ -5,6 +5,8 @@ from pydrake.all import (
 )
 import pydot
 
+MASS = 0.775  # quadrotor mass
+
 
 def diagram_visualize_connections(diagram: Diagram, file: Union[BinaryIO, str]) -> None:
     """

@@ -26,19 +26,15 @@ import time
 import argparse
 import yaml
 
-from src.utils import (
-    diagram_visualize_connections,
-)
-
-MASS = 0.775  # quadrotor mass
+from src.utils import *
 
 # Start Meshcat visualizer server.
 meshcat = StartMeshcat()
 
-# Create a diagram builder.
+################################################################################
+##### Digram Setup
+################################################################################
 builder = DiagramBuilder()
-
-# Create the MultibodyPlant and the SceneGraph.
 plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.0)
 parser = Parser(plant)
 (model_instance,) = parser.AddModelsFromUrl(
@@ -83,13 +79,17 @@ gravity = plant.gravity_field().gravity_vector()[2]
 constant_thrust_command = [-MASS * gravity / 4] * 4
 constant_input_source = builder.AddSystem(ConstantVectorSource(constant_thrust_command))
 builder.Connect(constant_input_source.get_output_port(), propellers.get_command_input_port())
-##############################################
 
 MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
 
-# Build the diagram and create a simulator.
+# Build the diagram and create a simulator
 diagram = builder.Build()
 diagram_visualize_connections(diagram, "diagram.svg")
+
+
+################################################################################
+##### Simulation Setup
+################################################################################
 simulator = Simulator(diagram)
 context = simulator.get_mutable_context()
 plant_context = plant.GetMyMutableContextFromRoot(context)
