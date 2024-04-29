@@ -50,11 +50,9 @@ AddFloatingRpyJoint(
 )
 plant.Finalize()
 
-# Set up the propellers.
+# Set up the propellers to generate spatial force on quadrotor
 body_index = plant.GetBodyByName("base_link").index()
-L = 0.15  # Length of the arms (m).
-kF = 1.0  # Force input constant.
-kM = 0.0245  # Moment input constant.
+kF = 1.0  # Force input constant
 prop_info = [
     PropellerInfo(body_index, RigidTransform([L, 0, 0]), kF, kM),
     PropellerInfo(body_index, RigidTransform([0, L, 0]), kF, -kM),
@@ -62,8 +60,6 @@ prop_info = [
     PropellerInfo(body_index, RigidTransform([0, -L, 0]), kF, -kM),
 ]
 propellers = builder.AddSystem(Propeller(prop_info))
-
-# Connect the propellers to the plant.
 builder.Connect(
     propellers.get_output_port(),
     plant.get_applied_spatial_force_input_port()
@@ -75,8 +71,8 @@ builder.Connect(
 
 
 ### TEMPORARY: CONSTANT CONTROL INPUT = mg ###
-gravity = plant.gravity_field().gravity_vector()[2]
-constant_thrust_command = [-MASS * gravity / 4] * 4
+g = plant.gravity_field().gravity_vector()[2]
+constant_thrust_command = [-MASS * g / 4] * 4
 constant_input_source = builder.AddSystem(ConstantVectorSource(constant_thrust_command))
 builder.Connect(constant_input_source.get_output_port(), propellers.get_command_input_port())
 
