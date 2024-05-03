@@ -5,7 +5,7 @@ from pydrake.all import (
 )
 import pydot
 
-MASS = 0.775                    # quadrotor mass
+m = 0.775                    # quadrotor mass
 L = 0.15                        # distance from the center of mass to the center of each rotor in the b1, b2 plane
 kM = 0.0245                     # relates propellers' torque generated to thrust generated
 

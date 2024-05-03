@@ -1,3 +1,8 @@
+from pydrake.all import (
+    RollPitchYaw,
+    RigidTransform,
+)
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -5,17 +10,26 @@ import pydrake.symbolic as sym
 
 from src.utils import *
 
+"""
+Quadrotor state is represented as:
 
-def discrete_dynamics(plant, plant_context, x, u):
+[x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
+"""
+
+def continuous_dynamics(plant, plant_context, x, u):
     """
-    Calculates next state based on current state and control input.
-
     Dynamics equation based on https://arxiv.org/pdf/1003.2005.
 
     u is a (4,) np vector of propeller forces.
 
-    x is the (12,) np vector containing the current state.
-    """ 
+    x is the (12,) np vector containing the current state in the form:
+
+    [x, y, z, R, P, Y, x_dot, y_dot, z_dot, R_dot, P_dot, Y_dot].T
+
+    Notation:
+     - p = position vector \in R3
+     - W = angular velocity \in R3
+    """
     def hat_map(v):
         """
         Convenience function to perform the hat map operation.The hat map of 
@@ -40,18 +54,39 @@ def discrete_dynamics(plant, plant_context, x, u):
     M = net_force_moments_vector[1:]
     
     # Rotation matrix from body-fixed frame to world frame
-    W_R_B = plant.CalcRelativeRotationMatrix(plant_context, 
+    R = plant.CalcRelativeRotationMatrix(plant_context, 
                                              plant.world_frame(), 
                                              plant.GetFrameByName("base_link"))
+    
+    print(f"R method 1: {R}")
+    
+    # Should be equivalent method of calculating Rotation matrix from body-fixed frame to world frame
+    R = RollPitchYaw(x[9], x[10], x[11]).ToRotationMatrix()
+
+    print(f"R method 2: {R}")
 
     # Get quadrotor's Inertia matrix in body-fixed frame
     I = plant.CalcSpatialInertia(plant_context, plant.GetFrameByName("base_link"), 0)  # body index 0
     g = plant.gravity_field().gravity_vector()[2]
+    v = x[6:9]  # Linear Velocity
+    W = x[9:]   # Angular Velocity ((3,) Vector)
 
-    q_dot = x[6:9]
-    q_ddot = np.array([[0],[0],[g]]) - f * W_R_B @ np.array([[0],[0],[1]])
-    
+    # Calculate x_dot
+    p_dot = v                                                                   # Linear Velocity
+    v_dot = np.array([[0],[0],[g]]) - (f * R @ np.array([[0],[0],[1]]))/m       # Linear Acceleration (due to gravity & propellors)
+    R_dot = R @ hat_map(W)                                                      # Rotational Velocity
+    W_dot = np.linalg.inv(I) @ (M - np.cross(W, I @ W))                         # Angular Acceleration
 
+    return np.concatenate((p_dot, v_dot, R_dot.flatten(), W_dot))
+
+
+def discrete_dynamics(plant, plant_context, x, u):
+    """
+    Calculates next state based on current state and control input, using
+    continuous dynamics.
+    """
+    dt = 0.1
+    return continuous_dynamics(plant, plant_context, x, u) * dt + x
 
 
 def angular_distance(angle_diff):

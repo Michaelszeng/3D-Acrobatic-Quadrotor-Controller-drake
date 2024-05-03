@@ -72,7 +72,7 @@ builder.Connect(
 
 ### TEMPORARY: CONSTANT CONTROL INPUT = mg ###
 g = plant.gravity_field().gravity_vector()[2]
-constant_thrust_command = [-MASS * g / 4] * 4
+constant_thrust_command = [-m * g / 4] * 4
 constant_input_source = builder.AddSystem(ConstantVectorSource(constant_thrust_command))
 builder.Connect(constant_input_source.get_output_port(), propellers.get_command_input_port())
 
