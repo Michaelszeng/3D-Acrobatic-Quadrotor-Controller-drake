@@ -27,6 +27,7 @@ import argparse
 import yaml
 
 from src.utils import *
+from src.ddp import solve_trajectory
 
 # Start Meshcat visualizer server.
 meshcat = StartMeshcat()
@@ -98,6 +99,9 @@ plant.GetJointByName("rz").set_angle(plant_context, 0.0)  # Yaw
 plant.GetJointByName("x").set_translation(plant_context, -1.5)
 plant.GetJointByName("y").set_translation(plant_context, 0.0)
 plant.GetJointByName("z").set_translation(plant_context, 1.0)
+
+# Solve for trajectory
+solve_trajectory(plant, plant_context, np.zeros(6))
 
 # Run the simulation
 meshcat.StartRecording()

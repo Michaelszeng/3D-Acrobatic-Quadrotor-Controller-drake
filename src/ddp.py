@@ -55,13 +55,13 @@ def continuous_dynamics(plant, plant_context, x, u):
     
     # Rotation matrix from body-fixed frame to world frame
     R = plant.CalcRelativeRotationMatrix(plant_context, 
-                                             plant.world_frame(), 
-                                             plant.GetFrameByName("base_link"))
+                                         plant.world_frame(), 
+                                         plant.GetFrameByName("base_link")).matrix()
     
     print(f"R method 1: {R}")
     
     # Should be equivalent method of calculating Rotation matrix from body-fixed frame to world frame
-    R = RollPitchYaw(x[9], x[10], x[11]).ToRotationMatrix()
+    R = RollPitchYaw(x[3], x[4], x[5]).ToRotationMatrix().matrix()
 
     print(f"R method 2: {R}")
 
@@ -86,7 +86,14 @@ def discrete_dynamics(plant, plant_context, x, u):
     continuous dynamics.
     """
     dt = 0.1
-    return continuous_dynamics(plant, plant_context, x, u) * dt + x
+
+    # Reformat x to be in the form [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
+    R = RollPitchYaw(x[3], x[4], x[5]).ToRotationMatrix().matrix()
+    x = np.concatenate((x[0:3], x[6:9], R.flatten(), x[9:]))
+
+    x_dot = continuous_dynamics(plant, plant_context, x, u)
+
+    return x_dot*dt + x
 
 
 def angular_distance(angle_diff):
@@ -98,9 +105,9 @@ def trajectory_cost(pose_goal, x, u):
     """
     Goal of the cost function is to reach the goal pose while minimizing energy.
     """
-    energy_cost = u**2
-    translation_error_cost = (x[:3] - pose_goal[:3])**2
-    rotation_error_cost = np.apply_along_axis(angular_distance, 0, x[3:6] - pose_goal[3:])
+    energy_cost = np.linalg.norm(u)
+    translation_error_cost = np.linalg.norm(x[:3] - pose_goal[:3])
+    rotation_error_cost = np.linalg.norm(np.apply_along_axis(angular_distance, 0, x[3:6] - pose_goal[3:]))
     return energy_cost + translation_error_cost + rotation_error_cost
 
 
@@ -127,7 +134,7 @@ def cost_trj(x_trj, u_trj):
 
 
 class derivatives:
-    def __init__(self, plant, plant_context, discrete_dynamics, cost_stage, cost_final):
+    def __init__(self, plant, plant_context, pose_goal, discrete_dynamics, trajectory_cost, terminal_cost):
         n_x = 12
         n_u = 4
         self.x_sym = np.array([sym.Variable("x_{}".format(i)) for i in range(n_x)])
@@ -135,14 +142,14 @@ class derivatives:
         x = self.x_sym
         u = self.u_sym
 
-        l = cost_stage(x, u)
+        l = trajectory_cost(pose_goal, x, u)
         self.l_x = sym.Jacobian([l], x).ravel()
         self.l_u = sym.Jacobian([l], u).ravel()
         self.l_xx = sym.Jacobian(self.l_x, x)
         self.l_ux = sym.Jacobian(self.l_u, x)
         self.l_uu = sym.Jacobian(self.l_u, u)
 
-        l_final = cost_final(x)
+        l_final = terminal_cost(pose_goal, x)
         self.l_final_x = sym.Jacobian([l_final], x).ravel()
         self.l_final_xx = sym.Jacobian(self.l_final_x, x)
 
@@ -174,8 +181,8 @@ class derivatives:
         return l_final_x, l_final_xx
 
 
-derivs = derivatives(discrete_dynamics, trajectory_cost, terminal_cost)
-
-
-def solve_trajectory(plant):
-    pass
+def solve_trajectory(plant, plant_context, pose_goal):
+    """
+    pose_goal is a [x, y, z, R, P, Y] vector
+    """
+    derivs = derivatives(plant, plant_context, pose_goal, discrete_dynamics, trajectory_cost, terminal_cost)
