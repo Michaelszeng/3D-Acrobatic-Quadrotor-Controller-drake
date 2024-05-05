@@ -16,7 +16,7 @@ Quadrotor state is represented as:
 [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
 """
 
-def continuous_dynamics(plant, plant_context, x, u):
+def continuous_dynamics(x, u):
     """
     Dynamics equation based on https://arxiv.org/pdf/1003.2005.
 
@@ -48,66 +48,64 @@ def continuous_dynamics(plant, plant_context, x, u):
                                          [0, -L, 0, L],
                                          [L, 0, -L, 0],
                                          [-kM, kM, -kM, kM]]) @ u
+
     # scalar net force in -b3 direction 
-    f = net_force_moments_vector[0,0]
+    f = net_force_moments_vector[0]
     # (3,1) moment vector 
     M = net_force_moments_vector[1:]
     
-    # Rotation matrix from body-fixed frame to world frame
-    R = plant.CalcRelativeRotationMatrix(plant_context, 
-                                         plant.world_frame(), 
-                                         plant.GetFrameByName("base_link")).matrix()
-    
-    print(f"R method 1: {R}")
-    
     # Should be equivalent method of calculating Rotation matrix from body-fixed frame to world frame
-    R = RollPitchYaw(x[3], x[4], x[5]).ToRotationMatrix().matrix()
+    R = euler_to_rotation_matrix(np.array([x[3], x[4], x[5]]))
 
-    print(f"R method 2: {R}")
-
-    # Get quadrotor's Inertia matrix in body-fixed frame
-    I = plant.CalcSpatialInertia(plant_context, plant.GetFrameByName("base_link"), 0)  # body index 0
-    g = plant.gravity_field().gravity_vector()[2]
     v = x[6:9]  # Linear Velocity
     W = x[9:]   # Angular Velocity ((3,) Vector)
 
     # Calculate x_dot
     p_dot = v                                                                   # Linear Velocity
     v_dot = np.array([[0],[0],[g]]) - (f * R @ np.array([[0],[0],[1]]))/m       # Linear Acceleration (due to gravity & propellors)
+    print(np.shape(v_dot.flatten()))
     R_dot = R @ hat_map(W)                                                      # Rotational Velocity
     W_dot = np.linalg.inv(I) @ (M - np.cross(W, I @ W))                         # Angular Acceleration
 
-    return np.concatenate((p_dot, v_dot, R_dot.flatten(), W_dot))
+    return np.concatenate((p_dot, v_dot.flatten(), R_dot.flatten(), W_dot))
 
 
-def discrete_dynamics(plant, plant_context, x, u):
+def discrete_dynamics(x, u):
     """
     Calculates next state based on current state and control input, using
     continuous dynamics.
     """
     dt = 0.1
 
+    x_dot = continuous_dynamics(x, u)
+
     # Reformat x to be in the form [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
-    R = RollPitchYaw(x[3], x[4], x[5]).ToRotationMatrix().matrix()
+    R = euler_to_rotation_matrix(np.array([x[3], x[4], x[5]]))
     x = np.concatenate((x[0:3], x[6:9], R.flatten(), x[9:]))
 
-    x_dot = continuous_dynamics(plant, plant_context, x, u)
-
     return x_dot*dt + x
-
-
-def angular_distance(angle_diff):
-    """Calculate the minimum distance between two angles."""
-    return 180 - abs(abs(angle_diff) - 180)
 
 
 def trajectory_cost(pose_goal, x, u):
     """
     Goal of the cost function is to reach the goal pose while minimizing energy.
+    
+    pose_goal is a [x, y, z, R, P, Y] vector
+
+    x is the (12,) np vector containing the current state
+
+    u is the (4,) np vector containing control inputs
     """
-    energy_cost = np.linalg.norm(u)
-    translation_error_cost = np.linalg.norm(x[:3] - pose_goal[:3])
-    rotation_error_cost = np.linalg.norm(np.apply_along_axis(angular_distance, 0, x[3:6] - pose_goal[3:]))
+    energy_cost = np.dot(u, u)
+
+    translation_error_cost = np.dot(x[:3] - pose_goal[:3], x[:3] - pose_goal[:3])
+
+    rotation_error = np.array([angular_distance(x[3] - pose_goal[3]),
+                               angular_distance(x[4] - pose_goal[4]),
+                               angular_distance(x[5] - pose_goal[5])])
+
+    rotation_error_cost = np.dot(rotation_error, rotation_error)
+
     return energy_cost + translation_error_cost + rotation_error_cost
 
 
@@ -115,9 +113,7 @@ def terminal_cost(pose_goal, x):
     """
     Terminal cost is the distance to the goal.
     """
-    translation_error_cost = (x[:3] - pose_goal[:3])**2
-    rotation_error_cost = np.apply_along_axis(angular_distance, 0, x[3:6] - pose_goal[3:])
-    return translation_error_cost + rotation_error_cost
+    return trajectory_cost(pose_goal, x, np.zeros(4))
 
 
 def cost_trj(x_trj, u_trj):
@@ -134,7 +130,7 @@ def cost_trj(x_trj, u_trj):
 
 
 class derivatives:
-    def __init__(self, plant, plant_context, pose_goal, discrete_dynamics, trajectory_cost, terminal_cost):
+    def __init__(self, pose_goal, discrete_dynamics, trajectory_cost, terminal_cost):
         n_x = 12
         n_u = 4
         self.x_sym = np.array([sym.Variable("x_{}".format(i)) for i in range(n_x)])
@@ -153,7 +149,7 @@ class derivatives:
         self.l_final_x = sym.Jacobian([l_final], x).ravel()
         self.l_final_xx = sym.Jacobian(self.l_final_x, x)
 
-        f = discrete_dynamics(plant, plant_context, x, u)
+        f = discrete_dynamics(x, u)
         self.f_x = sym.Jacobian(f, x)
         self.f_u = sym.Jacobian(f, u)
 
@@ -185,4 +181,4 @@ def solve_trajectory(plant, plant_context, pose_goal):
     """
     pose_goal is a [x, y, z, R, P, Y] vector
     """
-    derivs = derivatives(plant, plant_context, pose_goal, discrete_dynamics, trajectory_cost, terminal_cost)
+    derivs = derivatives(pose_goal, discrete_dynamics, trajectory_cost, terminal_cost)
