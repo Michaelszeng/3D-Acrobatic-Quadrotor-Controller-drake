@@ -33,7 +33,7 @@ def diagram_visualize_connections(diagram: Diagram, file: Union[BinaryIO, str]) 
     svg_data = pydot.graph_from_dot_data(
         diagram.GetGraphvizString())[0].create_svg()
     file.write(svg_data)
-    
+
 
 def euler_to_rotation_matrix(angles):
     """
@@ -43,12 +43,12 @@ def euler_to_rotation_matrix(angles):
     """
     roll, pitch, yaw = angles
 
-    cos_roll = sym.cos(roll)
-    sin_roll = sym.sin(roll)
-    cos_pitch = sym.cos(pitch)
-    sin_pitch = sym.sin(pitch)
-    cos_yaw = sym.cos(yaw)
-    sin_yaw = sym.sin(yaw)
+    cos_roll = np.cos(roll)
+    sin_roll = np.sin(roll)
+    cos_pitch = np.cos(pitch)
+    sin_pitch = np.sin(pitch)
+    cos_yaw = np.cos(yaw)
+    sin_yaw = np.sin(yaw)
 
     # Calculate the rotation matrix
     R_roll = np.array([[1, 0, 0],

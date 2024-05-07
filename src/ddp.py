@@ -59,6 +59,9 @@ def continuous_dynamics(x, u):
     p_dot = v                                                                   # Linear Velocity
     v_dot = np.array([[0],[0],[g]]) - (f * R @ np.array([[0],[0],[1]]))/m       # Linear Acceleration (due to gravity & propellors)
     R_dot = R @ hat_map(W)                                                      # Rotational Velocity
+    print(f"{I=}")
+    print(f"{W=}")
+    print(f"{(M - np.cross(W, I @ W))=}")
     W_dot = np.linalg.inv(I) @ (M - np.cross(W, I @ W))                         # Angular Acceleration
 
     return np.concatenate((p_dot, v_dot.flatten(), R_dot.flatten(), W_dot))
