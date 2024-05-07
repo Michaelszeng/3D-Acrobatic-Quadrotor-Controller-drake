@@ -101,7 +101,14 @@ plant.GetJointByName("y").set_translation(plant_context, 0.0)
 plant.GetJointByName("z").set_translation(plant_context, 1.0)
 
 # Solve for trajectory
-solve_trajectory(plant, plant_context, np.zeros(6))
+x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory(plant.get_state_output_port().Eval(plant_context), np.zeros(6))
+
+print(f"{x_trj=}")
+print(f"{u_trj=}")
+print(f"{cost_trace=}")
+print(f"{regu_trace=}")
+print(f"{redu_ratio_trace=}")
+print(f"{redu_trace=}")
 
 # Run the simulation
 meshcat.StartRecording()

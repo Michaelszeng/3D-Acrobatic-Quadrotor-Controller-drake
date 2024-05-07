@@ -8,6 +8,7 @@ from typing import BinaryIO, Optional, Union, Tuple
 import pydot
 import numpy as np
 
+
 m = 0.775       # quadrotor mass
 L = 0.15        # distance from the center of mass to the center of each rotor in the b1, b2 plane
 kM = 0.0245     # relates propellers' torque generated to thrust generated
@@ -15,6 +16,11 @@ g = -9.81       # gravity
 I = np.array([[1.50000000e-03, 0.00000000e+00, 2.02795951e-16],
               [0.00000000e+00, 2.50000000e-03, 0.00000000e+00],
               [2.02795951e-16, 0.00000000e+00, 3.50000000e-03]])  # Rotational Inertia
+
+n_u = 4         # number of control inputs
+n_x = 18        # number of state variables
+
+eps = 1e-6      # help prevent divide by zero
 
 
 def diagram_visualize_connections(diagram: Diagram, file: Union[BinaryIO, str]) -> None:
@@ -27,16 +33,7 @@ def diagram_visualize_connections(diagram: Diagram, file: Union[BinaryIO, str]) 
     svg_data = pydot.graph_from_dot_data(
         diagram.GetGraphvizString())[0].create_svg()
     file.write(svg_data)
-
-
-def angular_distance(angle_diff):
-    """
-    Differentiable funtion to calculate the minimum distance between two angles.
-    """
-    cos_diff = sym.cos(angle_diff)
-    sin_diff = sym.sin(angle_diff)
-    return 2 * sym.atan2(sym.sqrt(cos_diff**2 + sin_diff**2), sym.sqrt(1 - (cos_diff**2 + sin_diff**2)))
-
+    
 
 def euler_to_rotation_matrix(angles):
     """
