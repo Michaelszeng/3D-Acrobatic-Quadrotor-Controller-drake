@@ -110,6 +110,11 @@ print(f"{regu_trace=}")
 print(f"{redu_ratio_trace=}")
 print(f"{redu_trace=}")
 
+# Visualize Trajectory
+pos_3d_matrix = x_trj[:,:3].T
+print(f"{pos_3d_matrix.T=}")
+meshcat.SetLine("ddp traj", pos_3d_matrix)
+
 # Run the simulation
 meshcat.StartRecording()
 simulator.set_target_realtime_rate(1.0)
