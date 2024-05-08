@@ -59,9 +59,6 @@ def continuous_dynamics(x, u):
     p_dot = v                                                                   # Linear Velocity
     v_dot = np.array([[0],[0],[g]]) - (f * R @ np.array([[0],[0],[1]]))/m       # Linear Acceleration (due to gravity & propellors)
     R_dot = R @ hat_map(W)                                                      # Rotational Velocity
-    print(f"{I=}")
-    print(f"{W=}")
-    print(f"{(M - np.cross(W, I @ W))=}")
     W_dot = np.linalg.inv(I) @ (M - np.cross(W, I @ W))                         # Angular Acceleration
 
     return np.concatenate((p_dot, v_dot.flatten(), R_dot.flatten(), W_dot))
@@ -104,7 +101,7 @@ def trajectory_cost(pose_goal, x, u):
     
     pose_goal is a [x, y, z, R, P, Y] vector
 
-    x is the (12,) np vector containing the current state
+    x is the (18,) np vector containing the current state
 
     u is the (4,) np vector containing control inputs
     """
@@ -112,20 +109,21 @@ def trajectory_cost(pose_goal, x, u):
 
     translation_error_cost = np.dot(x[:3] - pose_goal[:3], x[:3] - pose_goal[:3])
 
-    rotation_error = np.array([(x[3] - pose_goal[3])**2,
-                               (x[4] - pose_goal[4])**2,
-                               (x[5] - pose_goal[5])**2])
+    # rotation_error = np.array([(x[3] - pose_goal[3])**2,
+    #                            (x[4] - pose_goal[4])**2,
+    #                            (x[5] - pose_goal[5])**2])
+    rotation_error = 0
 
     rotation_error_cost = np.dot(rotation_error, rotation_error)
 
-    return energy_cost + 10*translation_error_cost + 10*rotation_error_cost
+    return 0.001*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost
 
 
 def terminal_cost(pose_goal, x):
     """
     Terminal cost is the distance to the goal.
     """
-    return trajectory_cost(pose_goal, x, np.zeros(4))
+    return trajectory_cost(pose_goal, x, np.zeros(4)) * 10
 
 
 def cost_trj(pose_goal, x_trj, u_trj):
@@ -170,9 +168,6 @@ class derivatives:
         env = {self.x_sym[i]: x[i] for i in range(x.shape[0])}
         env.update({self.u_sym[i]: u[i] for i in range(u.shape[0])})
 
-        print(x)
-        print(u)
-        print(self.l_x)
         l_x = sym.Evaluate(self.l_x, env).ravel()
         l_u = sym.Evaluate(self.l_u, env).ravel()
         l_xx = sym.Evaluate(self.l_xx, env)
@@ -337,17 +332,18 @@ def backward_pass(derivs, x_trj, u_trj, regu):
     return k_trj, K_trj, expected_cost_redu
 
 
-def solve_trajectory(x0, pose_goal, max_iter=50, regu_init=100):
+def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=50, regu_init=100):
     """
     x0 is the Drake default [x, y, z, R, P, Y, x_dot, y_dot, z_dot, R_dot, P_dot, Y_dot] state vector.
 
     pose_goal is a [x, y, z, R, P, Y] vector.
     """
     # First, convert Drake initial state representation to SE(3) form [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
-    R = euler_to_rotation_matrix(x0[3:6])
-    x0 = np.concatenate((x0[:3], x0[6:9], R.flatten(), x0[9:12]))
+    R0 = euler_to_rotation_matrix(x0[3:6])
+    x0 = np.concatenate((x0[:3], x0[6:9], R0.flatten(), x0[9:12]))
 
-    N = 50
+    Rf = euler_to_rotation_matrix(pose_goal[3:6])
+    xf = np.concatenate((pose_goal[:3], np.zeros(3), Rf.flatten(), np.zeros(3)))
 
     derivs = derivatives(pose_goal, discrete_dynamics, trajectory_cost, terminal_cost)
 
@@ -362,10 +358,12 @@ def solve_trajectory(x0, pose_goal, max_iter=50, regu_init=100):
     # print(V_terms(Q_x, Q_u, Q_xx, Q_ux, Q_uu, K, k))
 
 
-    # First forward rollout
-    u_trj = np.random.randn(N - 1, n_u) * 0.0001
+    # Initial Guesses for trjectory (linear interp between x0 and xf)
+    u_trj = np.random.randn(N - 1, n_u) * 0.00001
     x_trj = dynamics_rollout(x0, u_trj)
+    # x_trj = np.linspace(x0, xf, N)
     total_cost = cost_trj(pose_goal, x_trj, u_trj)
+
     regu = regu_init
     max_regu = 10000
     min_regu = 0.01
@@ -411,3 +409,23 @@ def solve_trajectory(x0, pose_goal, max_iter=50, regu_init=100):
             break
 
     return x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace
+
+
+def solve_trajectory(x0, pose_goal, max_iter=50, regu_init=100):
+    """
+    Perform Linear Search in time dimension to find optimal number of time steps.
+
+    TODO: convert to binary search.
+    """
+    min_cost = np.inf
+    prev_min_cost_traj = []
+    for i in range(79, 80):
+        x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(x0, pose_goal, i, max_iter, regu_init)
+        print(cost_trace)
+        if cost_trace[-1] <= min_cost:
+            min_cost = cost_trace[-1]
+            prev_min_cost_traj = [x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace]
+        # else:
+        #     break
+
+    return *prev_min_cost_traj, i

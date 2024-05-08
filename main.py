@@ -27,7 +27,7 @@ import argparse
 import yaml
 
 from src.utils import *
-from src.ddp import solve_trajectory
+from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps
 
 # Start Meshcat visualizer server.
 meshcat = StartMeshcat()
@@ -101,18 +101,21 @@ plant.GetJointByName("y").set_translation(plant_context, 0.0)
 plant.GetJointByName("z").set_translation(plant_context, 1.0)
 
 # Solve for trajectory
-x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory(plant.get_state_output_port().Eval(plant_context), np.zeros(6))
+# x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, N = solve_trajectory(plant.get_state_output_port().Eval(plant_context), np.zeros(6))
+N=10
+x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), np.zeros(6), N)
 
-print(f"{x_trj=}")
-print(f"{u_trj=}")
-print(f"{cost_trace=}")
-print(f"{regu_trace=}")
-print(f"{redu_ratio_trace=}")
-print(f"{redu_trace=}")
+print(f"{N=}\n")
+print(f"{x_trj=}\n")
+print(f"{u_trj=}\n")
+print(f"{cost_trace=}\n")
+print(f"{regu_trace=}\n")
+print(f"{redu_ratio_trace=}\n")
+print(f"{redu_trace=}\n")
 
 # Visualize Trajectory
 pos_3d_matrix = x_trj[:,:3].T
-print(f"{pos_3d_matrix.T=}")
+# print(f"{pos_3d_matrix.T=}")
 meshcat.SetLine("ddp traj", pos_3d_matrix)
 
 # Run the simulation
