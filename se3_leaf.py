@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.linalg import inv
 from pydrake.systems.framework import LeafSystem, BasicVector
 
 class DirtyDerivative:
@@ -69,10 +70,10 @@ class SE3Controller(LeafSystem):
         # time constant for dirty derivative filte
         self.tau = 0.05
         self.Ts = 0.01
-        self.Mix = np.array([[1, 1, 1, 1],
+        self.Mix = inv(np.array([[1, 1, 1, 1],
                    [0, -self.d, 0, self.d],
                    [self.d, 0, -self.d, 0],
-                   [-self.c_tauf, self.c_tauf, -self.c_tauf, self.c_tauf]]) 
+                   [-self.c_tauf, self.c_tauf, -self.c_tauf, self.c_tauf]]) )
         
         # physical parameters of airframe
         self.gravity = 9.81
@@ -289,6 +290,7 @@ class SE3Controller(LeafSystem):
         
         return controller_output
     
+    # dont know if necessary
     def update_controller_state(self, drone_state, u_trajectory, x_trajectory, time):
         """
         Update the internal state of the controller.
