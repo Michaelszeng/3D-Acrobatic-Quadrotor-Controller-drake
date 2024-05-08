@@ -55,10 +55,10 @@ plant.Finalize()
 body_index = plant.GetBodyByName("base_link").index()
 kF = 1.0  # Force input constant
 prop_info = [
-    PropellerInfo(body_index, RigidTransform([L, 0, 0]), kF, kM),
-    PropellerInfo(body_index, RigidTransform([0, L, 0]), kF, -kM),
-    PropellerInfo(body_index, RigidTransform([-L, 0, 0]), kF, kM),
-    PropellerInfo(body_index, RigidTransform([0, -L, 0]), kF, -kM),
+    PropellerInfo(body_index, RigidTransform([L/np.sqrt(2), L/np.sqrt(2), 0]), kF, kM),
+    PropellerInfo(body_index, RigidTransform([-L/np.sqrt(2), L/np.sqrt(2), 0]), kF, -kM),
+    PropellerInfo(body_index, RigidTransform([-L/np.sqrt(2), -L/np.sqrt(2), 0]), kF, kM),
+    PropellerInfo(body_index, RigidTransform([L/np.sqrt(2), -L/np.sqrt(2), 0]), kF, -kM),
 ]
 propellers = builder.AddSystem(Propeller(prop_info))
 builder.Connect(
@@ -90,6 +90,7 @@ diagram_visualize_connections(diagram, "diagram.svg")
 simulator = Simulator(diagram)
 context = simulator.get_mutable_context()
 plant_context = plant.GetMyMutableContextFromRoot(context)
+propellers_context = propellers.GetMyMutableContextFromRoot(context)
 
 # Set initial state
 # plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("base_link"), RigidTransform([0, 0, 1]))
@@ -101,9 +102,10 @@ plant.GetJointByName("y").set_translation(plant_context, 0.0)
 plant.GetJointByName("z").set_translation(plant_context, 1.0)
 
 # Solve for trajectory
+pose_goal = np.array([0, 0, 4, 0, 0, 0])
 # x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, N = solve_trajectory(plant.get_state_output_port().Eval(plant_context), np.zeros(6))
 N=15
-x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), np.zeros(6), N)
+x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 
 print(f"{N=}\n")
 print(f"{x_trj=}\n")
@@ -119,7 +121,11 @@ pos_3d_matrix = x_trj[:,:3].T
 meshcat.SetLine("ddp traj", pos_3d_matrix)
 
 # Run the simulation
+t = 0
 meshcat.StartRecording()
 simulator.set_target_realtime_rate(1.0)
-simulator.AdvanceTo(4)
+for i in range(np.shape(u_trj)[0]):
+    propellers.get_command_input_port().FixValue(propellers_context, u_trj[i])
+    t += 0.05
+    simulator.AdvanceTo(t)
 meshcat.PublishRecording()

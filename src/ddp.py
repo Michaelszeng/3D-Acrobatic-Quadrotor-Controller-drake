@@ -42,22 +42,22 @@ def continuous_dynamics(x, u):
     
     # [f, M1, M2, M3].T
     net_force_moments_vector = np.array([[1, 1, 1, 1],
-                                         [0, -L, 0, L],
-                                         [L, 0, -L, 0],
+                                         [L/np.sqrt(2), L/np.sqrt(2), -L/np.sqrt(2), -L/np.sqrt(2)],
+                                         [-L/np.sqrt(2), L/np.sqrt(2), L/np.sqrt(2), -L/np.sqrt(2)],
                                          [-kM, kM, -kM, kM]]) @ u
 
     # scalar net force in -b3 direction 
     f = net_force_moments_vector[0]
     # (3,1) moment vector 
     M = net_force_moments_vector[1:]
-    
+
     R = x[6:15].reshape(3, 3)  # Rotation
     v = x[3:6]  # Linear Velocity
     W = x[15:]  # Angular Velocity ((3,) Vector)
 
     # Calculate x_dot
     p_dot = v                                                                   # Linear Velocity
-    v_dot = np.array([[0],[0],[g]]) - (f * R @ np.array([[0],[0],[1]]))/m       # Linear Acceleration (due to gravity & propellors)
+    v_dot = np.array([[0],[0],[g]]) + (f * R @ np.array([[0],[0],[1]]))/m       # Linear Acceleration (due to gravity & propellors)
     R_dot = R @ hat_map(W)                                                      # Rotational Velocity
     W_dot = np.linalg.inv(I) @ (M - np.cross(W, I @ W))                         # Angular Acceleration
 
@@ -125,7 +125,7 @@ def trajectory_cost(pose_goal, x, u):
     except:
         pass
 
-    return 0.001*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost
+    return 0.01*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost
 
 
 def terminal_cost(pose_goal, x):
