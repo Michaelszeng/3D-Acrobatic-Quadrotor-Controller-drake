@@ -67,3 +67,12 @@ def euler_to_rotation_matrix(angles):
     R = np.dot(R_yaw, np.dot(R_pitch, R_roll))
 
     return R
+
+def soft_clamp(x, mi, mx): 
+    """
+    Softly clamps the value `x` between `mi` and `mx` using a sigmoid function.
+    """
+    scaled = (x - mi) / (mx - mi)
+    exponent = -scaled + 0.5
+    base = 99999
+    return mi + (mx - mi) * sym.pow(1 + sym.pow(base, exponent), -1)

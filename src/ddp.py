@@ -73,7 +73,7 @@ def discrete_dynamics(x, u):
 
     x is the (18,) np vector containing the current state.
     """
-    dt = 0.1
+    dt = 0.05
     x_dot = continuous_dynamics(x, u)
     return x_dot*dt + x
 
@@ -109,12 +109,21 @@ def trajectory_cost(pose_goal, x, u):
 
     translation_error_cost = np.dot(x[:3] - pose_goal[:3], x[:3] - pose_goal[:3])
 
-    # rotation_error = np.array([(x[3] - pose_goal[3])**2,
-    #                            (x[4] - pose_goal[4])**2,
-    #                            (x[5] - pose_goal[5])**2])
-    rotation_error = 0
-
+    R = x[6:15].reshape(3, 3)
+    R_goal = euler_to_rotation_matrix(pose_goal[3:])
+    R_relative = R @ R_goal.T
+    trace_R = np.trace(R_relative)
+    trace_R = soft_clamp(trace_R, -1, 3)  # Softly clamp trace between -1 and 3 so that input to arccos is within its domain [-1, 1]
+    if trace_R.GetVariables().empty():  # Convert from symbolic expression to float value
+        trace_R = trace_R.Evaluate()
+    rotation_error = np.arccos((trace_R - 1) / 2)
     rotation_error_cost = np.dot(rotation_error, rotation_error)
+    # rotation_error_cost=0
+
+    try:
+        print(f"energy_cost: {energy_cost:>25}    translation_error_cost: {translation_error_cost:>25}    rotation_error_cost: {rotation_error_cost:>25}")
+    except:
+        pass
 
     return 0.001*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost
 
@@ -359,7 +368,7 @@ def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=50, regu_init=10
 
 
     # Initial Guesses for trjectory (linear interp between x0 and xf)
-    u_trj = np.random.randn(N - 1, n_u) * 0.00001
+    u_trj = np.random.randn(N - 1, n_u) * 0.0001
     x_trj = dynamics_rollout(x0, u_trj)
     # x_trj = np.linspace(x0, xf, N)
     total_cost = cost_trj(pose_goal, x_trj, u_trj)

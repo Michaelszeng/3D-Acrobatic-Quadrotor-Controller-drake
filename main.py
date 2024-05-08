@@ -102,7 +102,7 @@ plant.GetJointByName("z").set_translation(plant_context, 1.0)
 
 # Solve for trajectory
 # x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, N = solve_trajectory(plant.get_state_output_port().Eval(plant_context), np.zeros(6))
-N=10
+N=15
 x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), np.zeros(6), N)
 
 print(f"{N=}\n")
@@ -121,5 +121,5 @@ meshcat.SetLine("ddp traj", pos_3d_matrix)
 # Run the simulation
 meshcat.StartRecording()
 simulator.set_target_realtime_rate(1.0)
-simulator.AdvanceTo(4)  # Simulate for 10 seconds
+simulator.AdvanceTo(4)
 meshcat.PublishRecording()
