@@ -70,8 +70,17 @@ def dxdt(x, reset, tau, Ts):
 
     return dxdt.dot, dxdt.ddot, dxdt.d3dot, dxdt.d4dot
 
+dx1dt = DirtyDerivative(1, 0.05, 0.01)
+dx2dt = DirtyDerivative(2, 0.5, 0.01)
+dx3dt = DirtyDerivative(3, 0.5, 0.01)
+dx4dt = DirtyDerivative(4, 0.5, 0.01)
+db1dt = DirtyDerivative(1, 0.05, 0.01)
+db2dt = DirtyDerivative(2, 0.5, 0.01)
+dv1dt = DirtyDerivative(1, 0.05, 0.01)
+dv2dt = DirtyDerivative(2, 0.5, 0.01)
 
 def controller(u, P):
+    global dx1dt, dx2dt, dx3dt, dx4dt, db1dt, db2dt, dv1dt, dv2dt 
     # process inputs
     xd = u[:3]
     b1d = u[3:6]
@@ -193,6 +202,6 @@ class Params:
 
 # Example usage:
 P = Params()
-u = np.random.rand(24)  # Placeholder input
+u = np.random.rand(18)  # Placeholder input
 out = controller(u, P)
 print(out)
