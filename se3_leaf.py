@@ -198,14 +198,8 @@ class SE3Controller(LeafSystem):
                     [np.sin(np.pi/4), np.cos(np.pi/4), 0],
                     [0, 0, 1]
                 ])
-        # rot_180_b1 = np.array([
-        #             [1, 0, 0],
-        #             [0, -1, 0],
-        #             [0, 0, -1]
-        #         ])
         Rd = x_trajectory[6:15].reshape(3, 3)
-        b1d = inv(Rd) @ rot_45_b3 @ np.array([1, 0, 0])
-        # b1d = rot_matrix @ rot_180_b1 @ rot_45_b3 @ np.array([1, 0, 0])  # accounts for difference in body-frame definition between drake and Lee et al.
+        b1d = inv(Rd) @ rot_45_b3 @ np.array([1, 0, 0])  # accounts for difference in body-frame definition between drake and Lee et al.
         
         # feels redundant
         if time == 0:
