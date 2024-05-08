@@ -35,14 +35,10 @@ class SE3Controller(LeafSystem):
                                                              BasicVector(18))  #[x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
 
         # Define input port for the trajectory from the DDP solver
-        self.input_port_u_trajectory = self.DeclareInputPort("u_trajectory", 
-                                                                BasicVector(4))  # u_traj matrix [4, N]
-        
         self.input_port_x_trajectory = self.DeclareInputPort("x_trajectory", 
                                                                 BasicVector(18))  # x_traj matrix [18, N] 
         
         # Define input port for the current time
-        # unsure if needed, put there jsut incase for updates
         self.input_port_time = self.DeclareInputPort("time", 
                                                       BasicVector(1))  # time
         
@@ -52,7 +48,7 @@ class SE3Controller(LeafSystem):
                                                                            self.CalcOutput)
         
         # Initialize internal state (if needed)
-        self.controller_state = np.zeros(18)  # Placeholder
+        # self.controller_state = np.zeros(18)  # Placeholder
 
         # parameters of the drone
         # Control gains (taken from Lee2011, arXiv:1003.2005v4)
@@ -62,12 +58,12 @@ class SE3Controller(LeafSystem):
         self.kOmega = 2.54
 
         # The dist from CoM to the center of ea. rotor in the b1-b2 plane
-        self.d = 0.3 # random
+        self.d = 0.15
        
         # actuator constant
-        self.c_tauf = 10 #random
+        self.c_tauf = 0.0245
 
-        # time constant for dirty derivative filte
+        # time constant for dirty derivative filter
         self.tau = 0.05
         self.Ts = 0.01
         self.Mix = inv(np.array([[1, 1, 1, 1],
@@ -77,11 +73,7 @@ class SE3Controller(LeafSystem):
         
         # physical parameters of airframe
         self.gravity = 9.81
-        # tune/play around with
-        self.mass = 1 # random
-        self.Jxx = 1
-        self.Jyy = 1
-        self.Jzz = 1
+        self.mass = 0.775
 
         self.dx1dt = DirtyDerivative(1, 0.05, 0.01)
         self.dx2dt = DirtyDerivative(2, 0.5, 0.01)
@@ -114,7 +106,7 @@ class SE3Controller(LeafSystem):
         
         # Compute control output based on updated internal state and other inputs
         # controller_output = self.compute_control_output(updated_controller_state, drone_state, u_trajectory, x_trajectory, time)
-        controller_output = self.compute_control_output(drone_state, drone_state, u_trajectory, x_trajectory, time)
+        controller_output = self.compute_control_output(drone_state, x_trajectory, time)
 
         # Set output
         output.SetFromVector(controller_output)
@@ -168,7 +160,7 @@ class SE3Controller(LeafSystem):
             raise ValueError(f"Input vector must have length 1 or 3. The length of the input vector is {len(vec)}.")
 
         
-    def compute_control_output(self, controller_state, drone_state, u_trajectory, x_trajectory, time):
+    def compute_control_output(self, drone_state, x_trajectory, time):
         """
         Compute the control output of the controller.
         This method computes the control output of the controller based on the updated internal 
@@ -177,7 +169,6 @@ class SE3Controller(LeafSystem):
         Args:
             controller_state: Internal state of the controller.
             drone_state: Data representing the current state of the drone.
-            u_trajectory: Data representing the u_traj matrix (4xN).
             x_trajectory: Data representing the x_traj matrix (18xN).
             time: Current time.
 
@@ -278,7 +269,9 @@ class SE3Controller(LeafSystem):
         Omegac_1dot = self.vee(Rc.T @ Rc_2dot - self.hat(Omegac) @ self.hat(Omegac))
 
         # inertia matrix
-        J = np.diag([self.Jxx, self.Jyy, self.Jzz])
+        J = np.array([[1.50000000e-03, 0.00000000e+00, 2.02795951e-16],
+              [0.00000000e+00, 2.50000000e-03, 0.00000000e+00],
+              [2.02795951e-16, 0.00000000e+00, 3.50000000e-03]])
 
         # eq 21
         eR = 0.5 * self.vee(Rc.T @ rot_matrix - rot_matrix.T @ Rc).reshape(-1, 1)
@@ -295,62 +288,4 @@ class SE3Controller(LeafSystem):
 
         controller_output = np.concatenate((f, M, xd, xd_1dot, Omegac, Psi, deltaF))
         
-        return controller_output
-    
-    # dont know if necessary
-    def update_controller_state(self, drone_state, u_trajectory, x_trajectory, time):
-        """
-        Update the internal state of the controller.
-        This method is responsible for updating the internal state of the controller based on 
-        the current input data and possibly the previous controller state.
-
-        Args:
-            drone_state: Data representing the current state of the drone.
-            u_trajectory: Data representing the u_traj matrix (4xN).
-            x_trajectory: Data representing the x_traj matrix (18xN).
-            time: Current time.
-
-        Returns:
-            updated_controller_state: Updated internal state of the controller.
-        """
-        # Placeholder implementation (replace with actual update logic)
-        updated_controller_state = np.zeros(10)  # Placeholder, adjust size as needed
-        
-        return updated_controller_state
-    
-    # def dxdt(self, x, reset, tau, Ts):
-    #     if reset:
-    #         self.it = 0
-    #         self.dot = np.zeros((3, 1))
-    #         self.x_d1 = np.zeros((3, 1))
-    #         self.ddot = np.zeros((3, 1))
-    #         self.dot_d1 = np.zeros((3, 1))
-    #         self.d3dot = np.zeros((3, 1))
-    #         self.ddot_d1 = np.zeros((3, 1))
-    #         self.d4dot = np.zeros((3, 1))
-    #         self.d3dot_d1 = np.zeros((3, 1))
-
-    #     self.it += 1
-
-    #     d1 = 2 * tau - Ts
-    #     d2 = 2 * tau + Ts
-
-    #     if self.it > 1:
-    #         self.dot = (d1 / d2) * self.dot + (2 / d2) * (x - self.x_d1)
-
-    #     if self.it > 2:
-    #         self.ddot = (d1 / d2) * self.ddot + (2 / d2) * (self.dot - self.dot_d1)
-
-    #     if self.it > 3:
-    #         self.d3dot = (d1 / d2) * self.d3dot + (2 / d2) * (self.ddot - self.ddot_d1)
-
-    #     if self.it > 4:
-    #         self.d4dot = (d1 / d2) * self.d4dot + (2 / d2) * (self.d3dot - self.d3dot_d1)
-
-    #     self.x_d1 = x
-    #     self.dot_d1 = self.dot
-    #     self.ddot_d1 = self.ddot
-    #     self.d3dot_d1 = self.d3dot
-
-    #     return self.dot, self.ddot, self.d3dot, self.d4dot
-
+        return controller_output    
