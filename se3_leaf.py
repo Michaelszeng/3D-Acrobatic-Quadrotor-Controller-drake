@@ -73,7 +73,7 @@ class SE3Controller(LeafSystem):
         self.Mix = inv(np.array([[1, 1, 1, 1],
                    [0, -self.d, 0, self.d],
                    [self.d, 0, -self.d, 0],
-                   [-self.c_tauf, self.c_tauf, -self.c_tauf, self.c_tauf]]) )
+                   [-self.c_tauf, self.c_tauf, -self.c_tauf, self.c_tauf]]))
         
         # physical parameters of airframe
         self.gravity = 9.81
@@ -184,15 +184,28 @@ class SE3Controller(LeafSystem):
         Returns:
             controller_output: Output vector containing forces, moments, desired state, Omegac, Psi, and deltaF.
         """
-        # position tracking command
-        xd = np.zeros(3) 
-        # fixed body frame: {b1, b2, b3}
-        b1d = np.zeros(3)
         # current states
         position = drone_state[:3]
         velocity = drone_state[3:6]
         rot_matrix = drone_state[6:15].reshape(3, 3)
         Omega = drone_state[15:]
+
+        # desired x,y,z position
+        xd = x_trajectory[:3]
+        # desired b1 direction
+        rot_45_b3 = np.array([
+                    [np.cos(np.pi/4), -np.sin(np.pi/4), 0],
+                    [np.sin(np.pi/4), np.cos(np.pi/4), 0],
+                    [0, 0, 1]
+                ])
+        # rot_180_b1 = np.array([
+        #             [1, 0, 0],
+        #             [0, -1, 0],
+        #             [0, 0, -1]
+        #         ])
+        Rd = x_trajectory[6:15].reshape(3, 3)
+        b1d = inv(Rd) @ rot_45_b3 @ np.array([1, 0, 0])
+        # b1d = rot_matrix @ rot_180_b1 @ rot_45_b3 @ np.array([1, 0, 0])  # accounts for difference in body-frame definition between drake and Lee et al.
         
         # feels redundant
         if time == 0:

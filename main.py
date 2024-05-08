@@ -102,10 +102,10 @@ plant.GetJointByName("y").set_translation(plant_context, 0.0)
 plant.GetJointByName("z").set_translation(plant_context, 1.0)
 
 # Solve for trajectory
-pose_goal = np.array([0, 0, 4, 0, 0, 0])
-# x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, N = solve_trajectory(plant.get_state_output_port().Eval(plant_context), np.zeros(6))
-N=15
-x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
+pose_goal = np.array([0, 0, 3, 0, 0, 0])
+x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, N = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal)
+# N=15
+# x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 
 print(f"{N=}\n")
 print(f"{x_trj=}\n")

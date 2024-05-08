@@ -7,6 +7,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pydrake.symbolic as sym
+from scipy.linalg import expm  # matrix exponential in the sense of Lie groups
 
 from src.utils import *
 
@@ -26,20 +27,7 @@ def continuous_dynamics(x, u):
     Notation:
      - p = position vector \in R3
      - W = angular velocity \in R3
-    """
-    def hat_map(v):
-        """
-        Convenience function to perform the hat map operation.The hat map of 
-        $x$, $\hat{x}$, is simply a convenience linear operator that expresses 
-        the 3D vector $x$ as a "skew-symmetric" 3x3 matrix. This 3x3 matrix can 
-        be used to apply angular velocities to a rotation matrix, or to perform 
-        cross products using just matrix multiplicaton (i.e. $\hat{x}y = x 
-        \times y$)
-        """
-        return np.array([[0, -v[2], v[1]],
-                         [v[2], 0, -v[0]],
-                         [-v[1], v[0], 0]])
-    
+    """    
     # [f, M1, M2, M3].T
     net_force_moments_vector = np.array([[1, 1, 1, 1],
                                          [L/np.sqrt(2), L/np.sqrt(2), -L/np.sqrt(2), -L/np.sqrt(2)],
@@ -58,7 +46,7 @@ def continuous_dynamics(x, u):
     # Calculate x_dot
     p_dot = v                                                                   # Linear Velocity
     v_dot = np.array([[0],[0],[g]]) + (f * R @ np.array([[0],[0],[1]]))/m       # Linear Acceleration (due to gravity & propellors)
-    R_dot = R @ hat_map(W)                                                      # Rotational Velocity
+    R_dot = hat_map(W)                                                      # Rotational Velocity
     W_dot = np.linalg.inv(I) @ (M - np.cross(W, I @ W))                         # Angular Acceleration
 
     return np.concatenate((p_dot, v_dot.flatten(), R_dot.flatten(), W_dot))
@@ -73,9 +61,18 @@ def discrete_dynamics(x, u):
 
     x is the (18,) np vector containing the current state.
     """
-    dt = 0.05
     x_dot = continuous_dynamics(x, u)
-    return x_dot*dt + x
+
+    x_new = x_dot*dt + x  # Euler Integration
+    return x_new
+
+    # Precise integration of rotation matrix to preserve orthogonality and det=1
+    # R_dot = x_dot[6:15].reshape(3,3)
+    # R = x[6:15].reshape(3,3)
+    # R_new = expm(R_dot * dt) @ R
+
+    # Euler Integration for other components of state
+    # return np.concatenate((x[:6]+x_dot[:6]*dt, R_new.flatten(), x[15:]+x_dot[15:]*dt))
 
 
 def dynamics_rollout(x0, u_trj):
@@ -111,21 +108,28 @@ def trajectory_cost(pose_goal, x, u):
 
     R = x[6:15].reshape(3, 3)
     R_goal = euler_to_rotation_matrix(pose_goal[3:])
-    R_relative = R @ R_goal.T
-    trace_R = np.trace(R_relative)
-    trace_R = soft_clamp(trace_R, -1, 3)  # Softly clamp trace between -1 and 3 so that input to arccos is within its domain [-1, 1]
-    if trace_R.GetVariables().empty():  # Convert from symbolic expression to float value
-        trace_R = trace_R.Evaluate()
-    rotation_error = np.arccos((trace_R - 1) / 2)
+
+    # Error based on magnitude of angle difference between two rotations
+    # R_relative = R @ R_goal.T
+    # print(f"{R_relative}")
+    # trace_R = np.trace(R_relative)
+    # trace_R = soft_clamp(trace_R, -1, 3)  # Softly clamp trace between -1 and 3 so that input to arccos is within its domain [-1, 1]
+    # if trace_R.GetVariables().empty():  # Convert from symbolic expression to float value
+    #     trace_R = trace_R.Evaluate()
+    # rotation_error = np.arccos((trace_R - 1) / 2)
+
+    # Alternate error metric from Lee et al.
+    # rotation_error = 0.5 * np.trace(np.eye(3) - R_goal.T @ R)
+
+    rotation_error = 0
     rotation_error_cost = np.dot(rotation_error, rotation_error)
-    # rotation_error_cost=0
 
-    try:
-        print(f"energy_cost: {energy_cost:>25}    translation_error_cost: {translation_error_cost:>25}    rotation_error_cost: {rotation_error_cost:>25}")
-    except:
-        pass
+    # try:
+    #     print(f"energy_cost: {energy_cost:>25}    translation_error_cost: {translation_error_cost:>25}    rotation_error_cost: {rotation_error_cost:>25}")
+    # except:
+    #     pass
 
-    return 0.01*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost
+    return 0.005*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost
 
 
 def terminal_cost(pose_goal, x):
@@ -367,10 +371,9 @@ def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=50, regu_init=10
     # print(V_terms(Q_x, Q_u, Q_xx, Q_ux, Q_uu, K, k))
 
 
-    # Initial Guesses for trjectory (linear interp between x0 and xf)
+    # Initial Guesses for trjectory
     u_trj = np.random.randn(N - 1, n_u) * 0.0001
     x_trj = dynamics_rollout(x0, u_trj)
-    # x_trj = np.linspace(x0, xf, N)
     total_cost = cost_trj(pose_goal, x_trj, u_trj)
 
     regu = regu_init
@@ -423,18 +426,16 @@ def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=50, regu_init=10
 def solve_trajectory(x0, pose_goal, max_iter=50, regu_init=100):
     """
     Perform Linear Search in time dimension to find optimal number of time steps.
-
-    TODO: convert to binary search.
     """
     min_cost = np.inf
-    prev_min_cost_traj = []
-    for i in range(79, 80):
+    min_cost_traj = []
+    min_cost_time_steps = 0
+    for i in range(3, 20):
         x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(x0, pose_goal, i, max_iter, regu_init)
-        print(cost_trace)
+        print(f"====================================={i}-step cost: {cost_trace[-1]}=====================================")
         if cost_trace[-1] <= min_cost:
             min_cost = cost_trace[-1]
-            prev_min_cost_traj = [x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace]
-        # else:
-        #     break
+            min_cost_traj = [x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace]
+            min_cost_time_steps = i
 
-    return *prev_min_cost_traj, i
+    return *min_cost_traj, min_cost_time_steps

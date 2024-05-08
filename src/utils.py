@@ -22,6 +22,7 @@ n_u = 4         # number of control inputs
 n_x = 18        # number of state variables
 
 eps = 1e-6      # help prevent divide by zero
+dt = 0.05
 
 
 def diagram_visualize_connections(diagram: Diagram, file: Union[BinaryIO, str]) -> None:
@@ -34,6 +35,20 @@ def diagram_visualize_connections(diagram: Diagram, file: Union[BinaryIO, str]) 
     svg_data = pydot.graph_from_dot_data(
         diagram.GetGraphvizString())[0].create_svg()
     file.write(svg_data)
+
+
+def hat_map(v):
+        """
+        Convenience function to perform the hat map operation.The hat map of 
+        $x$, $\hat{x}$, is simply a convenience linear operator that expresses 
+        the 3D vector $x$ as a "skew-symmetric" 3x3 matrix. This 3x3 matrix can 
+        be used to apply angular velocities to a rotation matrix, or to perform 
+        cross products using just matrix multiplicaton (i.e. $\hat{x}y = x 
+        \times y$)
+        """
+        return np.array([[0, -v[2], v[1]],
+                         [v[2], 0, -v[0]],
+                         [-v[1], v[0], 0]])
 
 
 def euler_to_rotation_matrix(angles):
@@ -69,6 +84,7 @@ def euler_to_rotation_matrix(angles):
 
     return R
 
+
 def soft_clamp(x, mi, mx): 
     """
     Softly clamps the value `x` between `mi` and `mx` using a sigmoid function.
@@ -76,4 +92,5 @@ def soft_clamp(x, mi, mx):
     scaled = (x - mi) / (mx - mi)
     exponent = -scaled + 0.5
     base = 99999
+    print(f"{exponent=}")
     return mi + (mx - mi) * sym.pow(1 + sym.pow(base, exponent), -1)
