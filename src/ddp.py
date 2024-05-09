@@ -1,6 +1,8 @@
 from pydrake.all import (
     RollPitchYaw,
     RigidTransform,
+    AbstractValue,
+    BasicVector,
 )
 
 import matplotlib as mpl
@@ -46,10 +48,11 @@ def continuous_dynamics(x, u):
     # Calculate x_dot
     p_dot = v                                                                   # Linear Velocity
     v_dot = np.array([[0],[0],[g]]) + (f * R @ np.array([[0],[0],[1]]))/m       # Linear Acceleration (due to gravity & propellors)
-    R_dot = hat_map(W)                                                      # Rotational Velocity
+    R_dot = R @ hat_map(W)                                                      # Rotational Velocity
     W_dot = np.linalg.inv(I) @ (M - np.cross(W, I @ W))                         # Angular Acceleration
 
-    return np.concatenate((p_dot, v_dot.flatten(), R_dot.flatten(), W_dot))
+    # Also return the current rotation and angular velocity to do exponential map method of integrating rotation
+    return np.concatenate((p_dot, v_dot.flatten(), R_dot.flatten(), W_dot)), R, W
 
 
 def discrete_dynamics(x, u):
@@ -61,15 +64,16 @@ def discrete_dynamics(x, u):
 
     x is the (18,) np vector containing the current state.
     """
-    x_dot = continuous_dynamics(x, u)
+    x_dot, R, W = continuous_dynamics(x, u)
 
-    x_new = x_dot*dt + x  # Euler Integration
-    return x_new
+    # x_new = x_dot*dt + x  # Euler Integration
+    # return x_new
 
-    # Precise integration of rotation matrix to preserve orthogonality and det=1
-    # R_dot = x_dot[6:15].reshape(3,3)
-    # R = x[6:15].reshape(3,3)
-    # R_new = expm(R_dot * dt) @ R
+    # Precise integration of rotation matrix to preserve orthogonality and det=1 using Exponential Map
+    theta = np.linalg.norm(W + eps)  # add eps to prevent input to np.linalg.norm from going to 0 (np.linalg.norm becomes undifferentiable)
+    W_hat = hat_map(W) * dt
+    # Rodrigues' Formula
+    R_new = R @ (np.eye(3) + np.sin(theta) * W_hat + (1 - np.cos(theta)) * np.power(W_hat, 2))
 
     # Euler Integration for other components of state
     return np.concatenate((x[:6]+x_dot[:6]*dt, R_new.flatten(), x[15:]+x_dot[15:]*dt))
@@ -118,16 +122,16 @@ def trajectory_cost(pose_goal, x, u):
         trace_R = trace_R.Evaluate()
     rotation_error = np.arccos((trace_R - 1) / 2)
 
-    # Alternate error metric from Lee et al.
-    # rotation_error = 0.5 * np.trace(np.eye(3) - R_goal.T @ R)
+    # Error from taking norm of e_R (equation (8)) from Lee et al.
+    # rotation_error = np.linalg.norm(0.5 * vee_map(R_goal.T @ R - R.T @ R_goal) + eps)  # add eps to prevent input to np.linalg.norm from going to 0 (np.linalg.norm becomes undifferentiable)
 
-    rotation_error = 0
+    # rotation_error = 0
     rotation_error_cost = np.dot(rotation_error, rotation_error)
 
-    # try:
-    #     print(f"energy_cost: {energy_cost:>25}    translation_error_cost: {translation_error_cost:>25}    rotation_error_cost: {rotation_error_cost:>25}")
-    # except:
-    #     pass
+    try:
+        print(f"energy_cost: {energy_cost:>25}    translation_error_cost: {translation_error_cost:>25}    rotation_error_cost: {rotation_error_cost:>25}")
+    except:
+        pass
 
     return 0.005*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost
 
@@ -136,7 +140,7 @@ def terminal_cost(pose_goal, x):
     """
     Terminal cost is the distance to the goal.
     """
-    return trajectory_cost(pose_goal, x, np.zeros(4)) * 10
+    return trajectory_cost(pose_goal, x, np.zeros(4))
 
 
 def cost_trj(pose_goal, x_trj, u_trj):
@@ -442,8 +446,12 @@ def solve_trajectory(x0, pose_goal, max_iter=50, regu_init=100):
 
 
 class TrajectoryDesiredStateSource(LeafSystem):
-    def __init__(self, x_traj):
+    def __init__(self):
         LeafSystem.__init__(self)
+
+        # Input port for x_traj, computed by ddp
+        traj = AbstractValue.Make(np.array([]))
+        self.DeclareAbstractInputPort("trajectory", traj)
         
         # Define output port for desired drone state in SE(3) form:
         # [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
@@ -451,11 +459,11 @@ class TrajectoryDesiredStateSource(LeafSystem):
                                                                            BasicVector(18),
                                                                            self.CalcOutput)
         
-        self.x_traj = x_traj
-        
     def CalcOutput(self, context, output):
         """
         Simply convert the state representation and set the output
         """
-        desired_state = self.x_traj[int(context.get_time() / dt)]
+        traj = self.get_input_port(0).Eval(context)
+
+        desired_state = traj[int(context.get_time() / dt)]
         output.SetFromVector(desired_state)

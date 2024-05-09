@@ -53,6 +53,16 @@ def hat_map(v):
                          [-v[1], v[0], 0]])
 
 
+def vee_map(S):
+    """
+    Convenience function to perform the vee map operation. The vee map of a
+    skew-symmetric matrix S, denoted by vec(S), is an operation that converts the
+    matrix into a 3D vector. This function assumes that S is a 3x3 skew-symmetric
+    matrix and returns the corresponding 3D vector.
+    """
+    return np.array([S[2, 1], S[0, 2], S[1, 0]])
+
+
 def euler_to_rotation_matrix(angles):
     """
     Convert from Euler Angles to 3x3 Rotation Matrix using Drake Symbolic.

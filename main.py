@@ -28,7 +28,7 @@ import yaml
 
 from src.utils import *
 from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps, TrajectoryDesiredStateSource
-from se3_leaf import SE3Controller
+from src.se3_leaf import SE3Controller
 
 meshcat = StartMeshcat()
 
@@ -43,29 +43,6 @@ z0 = 1
 rx0 = 0.0
 ry0 = 0.1
 rz0 = 0.0
-
-
-################################################################################
-##### Run Trajectory Optimization
-################################################################################
-# Solve for trajectory
-pose_goal = np.array([0, 0, 0, 0, 0, 0])
-x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, N = solve_trajectory(np.array([x0, y0, z0, rx0, ry0, rz0]), pose_goal)
-# N=15
-# x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
-
-print(f"{N=}\n")
-print(f"{x_trj=}\n")
-print(f"{u_trj=}\n")
-print(f"{cost_trace=}\n")
-print(f"{regu_trace=}\n")
-print(f"{redu_ratio_trace=}\n")
-print(f"{redu_trace=}\n")
-
-# Visualize Trajectory
-pos_3d_matrix = x_trj[:,:3].T
-# print(f"{pos_3d_matrix.T=}")
-meshcat.SetLine("ddp traj", pos_3d_matrix)
 
 
 ################################################################################
@@ -106,25 +83,25 @@ builder.Connect(
     propellers.get_body_poses_input_port()
 )
 
-se3_controller = builder.AddSystem(SE3Controller())
-state_converter = builder.AddSystem(StateConverter())
-desired_state_source = builder.AddSystem(TrajectoryDesiredStateSource(x_trj))
-builder.Connect(
-    plant.GetOutputPort("quadrotor_state"),
-    state_converter.GetInputPort("drone_state")
-)
-builder.Connect(
-    state_converter.GetOutputPort("drone_state_se3"),
-    se3_controller.GetInputPort("drone_state")
-)
-builder.Connect(
-    desired_state_source.GetOutputPort("trajectory_desired_state")
-    se3_controller.GetInputPort("x_trajectory")
-)
-builder.Connect(
-    se3_controller.GetOutputPort("controller_output"),
-    propellers.get_command_input_port()
-)
+# se3_controller = builder.AddSystem(SE3Controller())
+# state_converter = builder.AddSystem(StateConverter())
+# desired_state_source = builder.AddSystem(TrajectoryDesiredStateSource())
+# builder.Connect(
+#     plant.GetOutputPort("quadrotor_state"),
+#     state_converter.GetInputPort("drone_state")
+# )
+# builder.Connect(
+#     state_converter.GetOutputPort("drone_state_se3"),
+#     se3_controller.GetInputPort("drone_state")
+# )
+# builder.Connect(
+#     desired_state_source.GetOutputPort("trajectory_desired_state")
+#     se3_controller.GetInputPort("x_trajectory")
+# )
+# builder.Connect(
+#     se3_controller.GetOutputPort("controller_output"),
+#     propellers.get_command_input_port()
+# )
 
 
 ### TEMPORARY: CONSTANT CONTROL INPUT = mg ###
@@ -135,7 +112,7 @@ builder.Connect(constant_input_source.get_output_port(), propellers.get_command_
 
 MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
 
-# Build the diagram and create a simulator
+# Build the diagram and create an svg
 diagram = builder.Build()
 diagram_visualize_connections(diagram, "diagram.svg")
 
@@ -156,6 +133,32 @@ plant.GetJointByName("z").set_translation(plant_context, z0)
 plant.GetJointByName("rx").set_angle(plant_context, rx0)  # Roll
 plant.GetJointByName("ry").set_angle(plant_context, ry0)  # Pitch
 plant.GetJointByName("rz").set_angle(plant_context, rz0)  # Yaw
+
+
+################################################################################
+##### Run Trajectory Optimization
+################################################################################
+# Solve for trajectory
+pose_goal = np.array([0, 0, 0, 0, 0, 0])
+# x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, N = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal)
+N=15
+x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
+
+print(f"{N=}\n")
+print(f"{x_trj=}\n")
+print(f"{u_trj=}\n")
+print(f"{cost_trace=}\n")
+print(f"{regu_trace=}\n")
+print(f"{redu_ratio_trace=}\n")
+print(f"{redu_trace=}\n")
+
+# Visualize Trajectory
+pos_3d_matrix = x_trj[:,:3].T
+# print(f"{pos_3d_matrix.T=}")
+meshcat.SetLine("ddp traj", pos_3d_matrix)
+
+# desired_state_source.GetInputPort("trajectory").FixValue(x_trj)
+
 
 # Run the simulation
 t = 0
