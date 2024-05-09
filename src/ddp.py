@@ -72,7 +72,7 @@ def discrete_dynamics(x, u):
     # R_new = expm(R_dot * dt) @ R
 
     # Euler Integration for other components of state
-    # return np.concatenate((x[:6]+x_dot[:6]*dt, R_new.flatten(), x[15:]+x_dot[15:]*dt))
+    return np.concatenate((x[:6]+x_dot[:6]*dt, R_new.flatten(), x[15:]+x_dot[15:]*dt))
 
 
 def dynamics_rollout(x0, u_trj):
@@ -110,13 +110,13 @@ def trajectory_cost(pose_goal, x, u):
     R_goal = euler_to_rotation_matrix(pose_goal[3:])
 
     # Error based on magnitude of angle difference between two rotations
-    # R_relative = R @ R_goal.T
-    # print(f"{R_relative}")
-    # trace_R = np.trace(R_relative)
-    # trace_R = soft_clamp(trace_R, -1, 3)  # Softly clamp trace between -1 and 3 so that input to arccos is within its domain [-1, 1]
-    # if trace_R.GetVariables().empty():  # Convert from symbolic expression to float value
-    #     trace_R = trace_R.Evaluate()
-    # rotation_error = np.arccos((trace_R - 1) / 2)
+    R_relative = R @ R_goal.T
+    print(f"{R_relative}")
+    trace_R = np.trace(R_relative)
+    trace_R = soft_clamp(trace_R, -1, 3)  # Softly clamp trace between -1 and 3 so that input to arccos is within its domain [-1, 1]
+    if trace_R.GetVariables().empty():  # Convert from symbolic expression to float value
+        trace_R = trace_R.Evaluate()
+    rotation_error = np.arccos((trace_R - 1) / 2)
 
     # Alternate error metric from Lee et al.
     # rotation_error = 0.5 * np.trace(np.eye(3) - R_goal.T @ R)
@@ -439,3 +439,23 @@ def solve_trajectory(x0, pose_goal, max_iter=50, regu_init=100):
             min_cost_time_steps = i
 
     return *min_cost_traj, min_cost_time_steps
+
+
+class TrajectoryDesiredStateSource(LeafSystem):
+    def __init__(self, x_traj):
+        LeafSystem.__init__(self)
+        
+        # Define output port for desired drone state in SE(3) form:
+        # [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
+        self.output_port_drone_state_se3 = self.DeclareVectorOutputPort("trajectory_desired_state",
+                                                                           BasicVector(18),
+                                                                           self.CalcOutput)
+        
+        self.x_traj = x_traj
+        
+    def CalcOutput(self, context, output):
+        """
+        Simply convert the state representation and set the output
+        """
+        desired_state = self.x_traj[int(context.get_time() / dt)]
+        output.SetFromVector(desired_state)

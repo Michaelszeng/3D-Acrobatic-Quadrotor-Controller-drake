@@ -1,6 +1,8 @@
 """ Miscellaneous Utility functions """
 from pydrake.all import (
     Diagram,
+    LeafSystem,
+    BasicVector,
 )
 import pydrake.symbolic as sym
 
@@ -94,3 +96,32 @@ def soft_clamp(x, mi, mx):
     base = 99999
     print(f"{exponent=}")
     return mi + (mx - mi) * sym.pow(1 + sym.pow(base, exponent), -1)
+
+
+class StateConverter(LeafSystem):
+    def __init__(self):
+        LeafSystem.__init__(self)
+        
+        # Define input port for the drone state from drake
+        # [x, y, z, R, P, Y, x_dot, y_dot, z_dot, R_dot, P_dot, Y_dot].T
+        self.input_port_drone_state = self.DeclareInputPort("drone_state", 
+                                                             BasicVector(12))
+        
+        # Define output port for drone state in SE(3) form:
+        # [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
+        self.output_port_drone_state_se3 = self.DeclareVectorOutputPort("drone_state_se3",
+                                                                           BasicVector(18),
+                                                                           self.CalcOutput)
+        
+    def CalcOutput(self, context, output):
+        """
+        Simply convert the state representation and set the output
+        """
+        # Retrieve input data from input ports
+        drone_state = self.input_port_drone_state.Eval(context)
+
+        R = euler_to_rotation_matrix(drone_state[3:6])
+        drone_state_se3 = np.concatenate((drone_state[:3], drone_state[6:9], R.flatten(0), drone_state[9:]))
+
+        # Set output
+        output.SetFromVector(drone_state_se3)

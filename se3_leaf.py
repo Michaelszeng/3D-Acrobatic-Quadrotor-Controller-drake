@@ -46,9 +46,6 @@ class SE3Controller(LeafSystem):
         self.output_port_controller_output = self.DeclareVectorOutputPort("controller_output",
                                                                            BasicVector(34),  # 4 for forces, 3 for moments, 3 for xd, 3 for xd_1dot, 3 for Omegac, 1 for Psi, 18 for deltaF
                                                                            self.CalcOutput)
-        
-        # Initialize internal state (if needed)
-        # self.controller_state = np.zeros(18)  # Placeholder
 
         # parameters of the drone
         # Control gains (taken from Lee2011, arXiv:1003.2005v4)
@@ -169,7 +166,7 @@ class SE3Controller(LeafSystem):
         Args:
             controller_state: Internal state of the controller.
             drone_state: Data representing the current state of the drone.
-            x_trajectory: Data representing the x_traj matrix (18xN).
+            x_trajectory: Data representing the current desired state from the desired trajectory.
             time: Current time.
 
         Returns:

@@ -27,13 +27,49 @@ import argparse
 import yaml
 
 from src.utils import *
-from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps
+from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps, TrajectoryDesiredStateSource
+from se3_leaf import SE3Controller
 
-# Start Meshcat visualizer server.
 meshcat = StartMeshcat()
 
+
 ################################################################################
-##### Digram Setup
+##### User-Defined Constants
+################################################################################
+# Set initial pose of quadrotor
+x0 = -1.5
+y0 = 0
+z0 = 1
+rx0 = 0.0
+ry0 = 0.1
+rz0 = 0.0
+
+
+################################################################################
+##### Run Trajectory Optimization
+################################################################################
+# Solve for trajectory
+pose_goal = np.array([0, 0, 0, 0, 0, 0])
+x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, N = solve_trajectory(np.array([x0, y0, z0, rx0, ry0, rz0]), pose_goal)
+# N=15
+# x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
+
+print(f"{N=}\n")
+print(f"{x_trj=}\n")
+print(f"{u_trj=}\n")
+print(f"{cost_trace=}\n")
+print(f"{regu_trace=}\n")
+print(f"{redu_ratio_trace=}\n")
+print(f"{redu_trace=}\n")
+
+# Visualize Trajectory
+pos_3d_matrix = x_trj[:,:3].T
+# print(f"{pos_3d_matrix.T=}")
+meshcat.SetLine("ddp traj", pos_3d_matrix)
+
+
+################################################################################
+##### Diagram Setup
 ################################################################################
 builder = DiagramBuilder()
 plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.0)
@@ -70,6 +106,26 @@ builder.Connect(
     propellers.get_body_poses_input_port()
 )
 
+se3_controller = builder.AddSystem(SE3Controller())
+state_converter = builder.AddSystem(StateConverter())
+desired_state_source = builder.AddSystem(TrajectoryDesiredStateSource(x_trj))
+builder.Connect(
+    plant.GetOutputPort("quadrotor_state"),
+    state_converter.GetInputPort("drone_state")
+)
+builder.Connect(
+    state_converter.GetOutputPort("drone_state_se3"),
+    se3_controller.GetInputPort("drone_state")
+)
+builder.Connect(
+    desired_state_source.GetOutputPort("trajectory_desired_state")
+    se3_controller.GetInputPort("x_trajectory")
+)
+builder.Connect(
+    se3_controller.GetOutputPort("controller_output"),
+    propellers.get_command_input_port()
+)
+
 
 ### TEMPORARY: CONSTANT CONTROL INPUT = mg ###
 g = plant.gravity_field().gravity_vector()[2]
@@ -94,38 +150,22 @@ propellers_context = propellers.GetMyMutableContextFromRoot(context)
 
 # Set initial state
 # plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("base_link"), RigidTransform([0, 0, 1]))
-plant.GetJointByName("rx").set_angle(plant_context, 0.0)  # Roll
-plant.GetJointByName("ry").set_angle(plant_context, 0.1)  # Pitch
-plant.GetJointByName("rz").set_angle(plant_context, 0.0)  # Yaw
-plant.GetJointByName("x").set_translation(plant_context, -1.5)
-plant.GetJointByName("y").set_translation(plant_context, 0.0)
-plant.GetJointByName("z").set_translation(plant_context, 1.0)
-
-# Solve for trajectory
-pose_goal = np.array([0, 0, 3, 0, 0, 0])
-x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, N = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal)
-# N=15
-# x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
-
-print(f"{N=}\n")
-print(f"{x_trj=}\n")
-print(f"{u_trj=}\n")
-print(f"{cost_trace=}\n")
-print(f"{regu_trace=}\n")
-print(f"{redu_ratio_trace=}\n")
-print(f"{redu_trace=}\n")
-
-# Visualize Trajectory
-pos_3d_matrix = x_trj[:,:3].T
-# print(f"{pos_3d_matrix.T=}")
-meshcat.SetLine("ddp traj", pos_3d_matrix)
+plant.GetJointByName("x").set_translation(plant_context, x0)
+plant.GetJointByName("y").set_translation(plant_context, y0)
+plant.GetJointByName("z").set_translation(plant_context, z0)
+plant.GetJointByName("rx").set_angle(plant_context, rx0)  # Roll
+plant.GetJointByName("ry").set_angle(plant_context, ry0)  # Pitch
+plant.GetJointByName("rz").set_angle(plant_context, rz0)  # Yaw
 
 # Run the simulation
 t = 0
 meshcat.StartRecording()
 simulator.set_target_realtime_rate(1.0)
+
+# Testing DDP with open-loop control
 for i in range(np.shape(u_trj)[0]):
     propellers.get_command_input_port().FixValue(propellers_context, u_trj[i])
     t += 0.05
     simulator.AdvanceTo(t)
+
 meshcat.PublishRecording()
