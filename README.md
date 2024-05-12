@@ -14,3 +14,7 @@ Necessary installs:
     `pip install underactuated`
     `pip install ipython`
     `pip install pyvirtualdisplay`
+
+## Running
+
+`python3 main.py`
