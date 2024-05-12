@@ -150,7 +150,7 @@ plant.GetJointByName("rz").set_angle(plant_context, rz0)  # Yaw
 ################################################################################
 # Solve for trajectory
 N=20
-x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
+x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, final_translation_error, final_rotation_error = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 # x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 
 print(f"{dt=}\n")
@@ -160,6 +160,7 @@ print(f"{cost_trace=}\n")
 print(f"{regu_trace=}\n")
 print(f"{redu_ratio_trace=}\n")
 print(f"{redu_trace=}\n")
+print(f"final_translation_error: {final_translation_error:>25}    final_rotation_error: {final_rotation_error:>25}")
 
 # Visualize Trajectory
 pos_3d_matrix = x_trj[:,:3].T

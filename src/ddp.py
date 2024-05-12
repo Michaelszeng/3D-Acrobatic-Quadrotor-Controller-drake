@@ -456,7 +456,14 @@ def solve_trajectory(x0, pose_goal, N):
             min_cost_traj = [x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace]
             min_cost_time_interval = i
 
-    return *min_cost_traj, min_cost_time_interval
+    # Compute errors at the very end of the trajectory
+    final_translation_error = np.linalg.norm(x_trj[-1][:3] - pose_goal[:3])
+    R = x_trj[-1][6:15].reshape(3, 3)
+    R_goal = euler_to_rotation_matrix(pose_goal[3:])
+    # Error from taking norm of e_R (equation (8)) from Lee et al.
+    final_rotation_error = np.linalg.norm(0.5 * vee_map(R_goal.T @ R - R.T @ R_goal))
+
+    return *min_cost_traj, min_cost_time_interval, final_translation_error, final_rotation_error
 
 
 class TrajectoryDesiredStateSource(LeafSystem):
