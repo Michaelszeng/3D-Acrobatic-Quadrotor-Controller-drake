@@ -96,7 +96,7 @@ def dynamics_rollout(x0, u_trj):
     return np.array(x_trj)
 
 
-def trajectory_cost(pose_goal, x, u):
+def trajectory_cost(pose_goal, x, u, t, N, beta=10):
     """
     Goal of the cost function is to reach the goal pose while minimizing energy.
     
@@ -106,7 +106,10 @@ def trajectory_cost(pose_goal, x, u):
 
     u is the (4,) np vector containing control inputs
     """
-    energy_cost = np.dot(u, u)
+    scale = np.exp((beta * (t - N)) / N)  # Exponential scaling factor
+
+    # energy_cost = np.dot(u, u)
+    energy_cost = 0
 
     translation_error_cost = np.dot(x[:3] - pose_goal[:3], x[:3] - pose_goal[:3])
 
@@ -114,33 +117,33 @@ def trajectory_cost(pose_goal, x, u):
     R_goal = euler_to_rotation_matrix(pose_goal[3:])
 
     # Error based on magnitude of angle difference between two rotations
-    R_relative = R @ R_goal.T
-    print(f"{R_relative}")
-    trace_R = np.trace(R_relative)
-    trace_R = soft_clamp(trace_R, -1, 3)  # Softly clamp trace between -1 and 3 so that input to arccos is within its domain [-1, 1]
-    if trace_R.GetVariables().empty():  # Convert from symbolic expression to float value
-        trace_R = trace_R.Evaluate()
-    rotation_error = np.arccos((trace_R - 1) / 2)
+    # R_relative = R @ R_goal.T
+    # print(f"{R_relative}")
+    # trace_R = np.trace(R_relative)
+    # trace_R = soft_clamp(trace_R, -1, 3)  # Softly clamp trace between -1 and 3 so that input to arccos is within its domain [-1, 1]
+    # if trace_R.GetVariables().empty():  # Convert from symbolic expression to float value
+    #     trace_R = trace_R.Evaluate()
+    # rotation_error = np.arccos((trace_R - 1) / 2)
 
     # Error from taking norm of e_R (equation (8)) from Lee et al.
-    # rotation_error = np.linalg.norm(0.5 * vee_map(R_goal.T @ R - R.T @ R_goal) + eps)  # add eps to prevent input to np.linalg.norm from going to 0 (np.linalg.norm becomes undifferentiable)
+    rotation_error = np.linalg.norm(0.5 * vee_map(R_goal.T @ R - R.T @ R_goal) + eps)  # add eps to prevent input to np.linalg.norm from going to 0 (np.linalg.norm becomes undifferentiable)
 
     # rotation_error = 0
     rotation_error_cost = np.dot(rotation_error, rotation_error)
 
-    try:
-        print(f"energy_cost: {energy_cost:>25}    translation_error_cost: {translation_error_cost:>25}    rotation_error_cost: {rotation_error_cost:>25}")
-    except:
-        pass
+    # try:
+    #     print(f"energy_cost: {energy_cost:>25}    translation_error_cost: {translation_error_cost:>25}    rotation_error_cost: {rotation_error_cost:>25}")
+    # except:
+    #     pass
 
-    return 0.005*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost
+    return scale * (0.005*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost)
 
 
-def terminal_cost(pose_goal, x):
+def terminal_cost(pose_goal, x, N):
     """
     Terminal cost is the distance to the goal.
     """
-    return trajectory_cost(pose_goal, x, np.zeros(4))
+    return 5*trajectory_cost(pose_goal, x, np.zeros(4), N, N)
 
 
 def cost_trj(pose_goal, x_trj, u_trj):
@@ -150,29 +153,32 @@ def cost_trj(pose_goal, x_trj, u_trj):
     
     # sum cost at each action step
     for i in range(N-1):
-        total += trajectory_cost(pose_goal, x_trj[i], u_trj[i])
+        total += trajectory_cost(pose_goal, x_trj[i], u_trj[i], i, N)
 
-    total += terminal_cost(pose_goal, x_trj[N-1])  # add final cost
+    total += terminal_cost(pose_goal, x_trj[N-1], N)  # add final cost
     return total
 
 
 class derivatives:
-    def __init__(self, pose_goal, discrete_dynamics, trajectory_cost, terminal_cost):
+    def __init__(self, pose_goal, discrete_dynamics, trajectory_cost, terminal_cost, N):
         n_x = 18
         n_u = 4
         self.x_sym = np.array([sym.Variable("x_{}".format(i)) for i in range(n_x)])
         self.u_sym = np.array([sym.Variable("u_{}".format(i)) for i in range(n_u)])
+        self.t_sym = np.array([sym.Variable("t")])
         x = self.x_sym
         u = self.u_sym
+        t = self.t_sym
+        self.N = N
 
-        l = trajectory_cost(pose_goal, x, u)
+        l = trajectory_cost(pose_goal, x, u, t, N)
         self.l_x = sym.Jacobian([l], x).ravel()
         self.l_u = sym.Jacobian([l], u).ravel()
         self.l_xx = sym.Jacobian(self.l_x, x)
         self.l_ux = sym.Jacobian(self.l_u, x)
         self.l_uu = sym.Jacobian(self.l_u, u)
 
-        l_final = terminal_cost(pose_goal, x)
+        l_final = terminal_cost(pose_goal, x, N)
         self.l_final_x = sym.Jacobian([l_final], x).ravel()
         self.l_final_xx = sym.Jacobian(self.l_final_x, x)
 
@@ -180,10 +186,11 @@ class derivatives:
         self.f_x = sym.Jacobian(f, x)
         self.f_u = sym.Jacobian(f, u)
 
-    def stage(self, x, u):
+    def stage(self, x, u, t):
         # Populate real values of x and u into symbolic variable
         env = {self.x_sym[i]: x[i] for i in range(x.shape[0])}
         env.update({self.u_sym[i]: u[i] for i in range(u.shape[0])})
+        env.update({self.t_sym[0]: t})
 
         l_x = sym.Evaluate(self.l_x, env).ravel()
         l_u = sym.Evaluate(self.l_u, env).ravel()
@@ -331,7 +338,7 @@ def backward_pass(derivs, x_trj, u_trj, regu):
 
     # Reverse iterate from trajectory end to start
     for n in range(u_trj.shape[0] - 1, -1, -1):
-        l_x, l_u, l_xx, l_ux, l_uu, f_x, f_u = derivs.stage(x_trj[n], u_trj[n])
+        l_x, l_u, l_xx, l_ux, l_uu, f_x, f_u = derivs.stage(x_trj[n], u_trj[n], n)
         Q_x, Q_u, Q_xx, Q_ux, Q_uu = Q_terms(l_x, l_u, l_xx, l_ux, l_uu, f_x, f_u, V_x, V_xx)
 
         # Add regularization to ensure that Q_uu is invertible and nicely conditioned
@@ -349,7 +356,7 @@ def backward_pass(derivs, x_trj, u_trj, regu):
     return k_trj, K_trj, expected_cost_redu
 
 
-def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=50, regu_init=100):
+def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=200, regu_init=100):
     """
     x0 is the Drake default [x, y, z, R, P, Y, x_dot, y_dot, z_dot, R_dot, P_dot, Y_dot] state vector.
 
@@ -362,7 +369,7 @@ def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=50, regu_init=10
     Rf = euler_to_rotation_matrix(pose_goal[3:6])
     xf = np.concatenate((pose_goal[:3], np.zeros(3), Rf.flatten(), np.zeros(3)))
 
-    derivs = derivatives(pose_goal, discrete_dynamics, trajectory_cost, terminal_cost)
+    derivs = derivatives(pose_goal, discrete_dynamics, trajectory_cost, terminal_cost, N)
 
     # u_trj = np.random.randn(N - 1, n_u) * 0.0001
     # x_trj = dynamics_rollout(x0, u_trj)
@@ -375,8 +382,9 @@ def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=50, regu_init=10
     # print(V_terms(Q_x, Q_u, Q_xx, Q_ux, Q_uu, K, k))
 
 
-    # Initial Guesses for trjectory
-    u_trj = np.random.randn(N - 1, n_u) * 0.0001
+    # Initial Guesses for trajectory
+    u_trj = np.ones((N - 1, n_u)) * (-m * g / 4)
+    # u_trj = np.random.randn(N - 1, n_u) * 0.0001
     x_trj = dynamics_rollout(x0, u_trj)
     total_cost = cost_trj(pose_goal, x_trj, u_trj)
 
@@ -422,12 +430,13 @@ def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=50, regu_init=10
 
         # Early termination if expected improvement is small
         if expected_cost_redu <= 1e-6:
+            print("Expected cost reduction too low. Terminating early.")
             break
 
     return x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace
 
 
-def solve_trajectory(x0, pose_goal, max_iter=50, regu_init=100):
+def solve_trajectory(x0, pose_goal):
     """
     Perform Linear Search in time dimension to find optimal number of time steps.
     """
@@ -435,7 +444,7 @@ def solve_trajectory(x0, pose_goal, max_iter=50, regu_init=100):
     min_cost_traj = []
     min_cost_time_steps = 0
     for i in range(3, 20):
-        x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(x0, pose_goal, i, max_iter, regu_init)
+        x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(x0, pose_goal, i)
         print(f"====================================={i}-step cost: {cost_trace[-1]}=====================================")
         if cost_trace[-1] <= min_cost:
             min_cost = cost_trace[-1]

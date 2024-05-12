@@ -24,7 +24,7 @@ n_u = 4         # number of control inputs
 n_x = 18        # number of state variables
 
 eps = 1e-6      # help prevent divide by zero
-dt = 0.05
+dt = 0.1
 
 
 def diagram_visualize_connections(diagram: Diagram, file: Union[BinaryIO, str]) -> None:

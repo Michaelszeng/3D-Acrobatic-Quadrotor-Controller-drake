@@ -41,7 +41,7 @@ x0 = -1.5
 y0 = 0
 z0 = 1
 rx0 = 0.0
-ry0 = 0.1
+ry0 = 0.0
 rz0 = 0.0
 
 
@@ -134,6 +134,7 @@ plant.GetJointByName("rx").set_angle(plant_context, rx0)  # Roll
 plant.GetJointByName("ry").set_angle(plant_context, ry0)  # Pitch
 plant.GetJointByName("rz").set_angle(plant_context, rz0)  # Yaw
 
+# plant.GetJointByName("x").set_translation_rate(plant_context, 3.0)
 
 ################################################################################
 ##### Run Trajectory Optimization
@@ -141,7 +142,7 @@ plant.GetJointByName("rz").set_angle(plant_context, rz0)  # Yaw
 # Solve for trajectory
 pose_goal = np.array([0, 0, 0, 0, 0, 0])
 # x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, N = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal)
-N=15
+N=16
 x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 
 print(f"{N=}\n")
@@ -168,7 +169,7 @@ simulator.set_target_realtime_rate(1.0)
 # Testing DDP with open-loop control
 for i in range(np.shape(u_trj)[0]):
     propellers.get_command_input_port().FixValue(propellers_context, u_trj[i])
-    t += 0.05
+    t += dt
     simulator.AdvanceTo(t)
 
 meshcat.PublishRecording()
