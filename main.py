@@ -44,6 +44,8 @@ rx0 = 0.0
 ry0 = 0.0
 rz0 = 0.0
 
+pose_goal = np.array([0, 0, 2.0, 0, 0, 0])
+
 
 ################################################################################
 ##### Diagram Setup
@@ -62,10 +64,8 @@ AddFloatingRpyJoint(
 )
 
 # Add visual quadrotor to show the desired pose of the main quadrotor
-parser.AddModelsFromUrl(f"file://{os.path.abspath('visual_quadrotor.urdf')}")
-visual_quadrotor_pose = RigidTransform(RollPitchYaw(np.array([rx0, ry0, rz0])), np.array([x0, y0, z0]))
-plant.SetDefaultFreeBodyPose(plant.GetBodyByName("visual_quadrotor_base_link"), visual_quadrotor_pose)
-plant.WeldFrames(plant.world_frame(), plant.GetFrameByName("visual_quadrotor_base_link"))
+(visual_quadrotor_model_instance,) = parser.AddModelsFromUrl(f"file://{os.path.abspath('visual_quadrotor.urdf')}")
+visual_quadrotor_pose = RigidTransform(RollPitchYaw(pose_goal[3:]), pose_goal[:3])
 
 plant.Finalize()
 
@@ -130,6 +130,12 @@ context = simulator.get_mutable_context()
 plant_context = plant.GetMyMutableContextFromRoot(context)
 propellers_context = propellers.GetMyMutableContextFromRoot(context)
 
+# Set visual quadrotor position
+plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("visual_quadrotor_base_link"), visual_quadrotor_pose)
+visual_quadrotor_joint_idx = plant.GetJointIndices(visual_quadrotor_model_instance)[0]
+visual_quadrotor_joint = plant.get_joint(visual_quadrotor_joint_idx)  # Joint object
+visual_quadrotor_joint.Lock(plant_context)
+
 # Set initial state
 # plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("base_link"), RigidTransform([0, 0, 1]))
 plant.GetJointByName("x").set_translation(plant_context, x0)
@@ -139,14 +145,11 @@ plant.GetJointByName("rx").set_angle(plant_context, rx0)  # Roll
 plant.GetJointByName("ry").set_angle(plant_context, ry0)  # Pitch
 plant.GetJointByName("rz").set_angle(plant_context, rz0)  # Yaw
 
-# plant.GetJointByName("x").set_translation_rate(plant_context, 3.0)
-
 ################################################################################
 ##### Run Trajectory Optimization
 ################################################################################
 # Solve for trajectory
 N=20
-pose_goal = np.array([0, 0, 0, 0, 0, 0])
 x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 # x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 
