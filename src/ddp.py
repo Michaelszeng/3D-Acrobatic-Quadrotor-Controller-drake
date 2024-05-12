@@ -55,7 +55,7 @@ def continuous_dynamics(x, u):
     return np.concatenate((p_dot, v_dot.flatten(), R_dot.flatten(), W_dot)), R, W
 
 
-def discrete_dynamics(x, u, dt):
+def discrete_dynamics(x, u, n, dt_nominal):
     """
     Calculates next state based on current state and control input, using
     continuous dynamics.
@@ -64,6 +64,10 @@ def discrete_dynamics(x, u, dt):
 
     x is the (18,) np vector containing the current state.
     """
+    # https://www.desmos.com/calculator/vegofqyne7
+    beta = 5
+    dt = 1/(beta*n + (1/dt_nominal)) + dt_nominal
+
     x_dot, R, W = continuous_dynamics(x, u)
 
     # x_new = x_dot*dt + x  # Euler Integration
@@ -91,12 +95,12 @@ def dynamics_rollout(x0, u_trj, dt):
 
     x_trj = [x0]
     for i in range(N):
-        x_trj.append(discrete_dynamics(x_trj[-1], u_trj[i], dt))
+        x_trj.append(discrete_dynamics(x_trj[-1], u_trj[i], i, dt))
 
     return np.array(x_trj)
 
 
-def trajectory_cost(pose_goal, x, u, t, N, beta=10):
+def trajectory_cost(pose_goal, x, u, n, N, beta=10):
     """
     Goal of the cost function is to reach the goal pose while minimizing energy.
     
@@ -106,7 +110,7 @@ def trajectory_cost(pose_goal, x, u, t, N, beta=10):
 
     u is the (4,) np vector containing control inputs
     """
-    scale = np.exp((beta * (t - N)) / N)  # Exponential scaling factor
+    scale = np.exp((beta * (n - N)) / N)  # Exponential scaling factor
 
     # energy_cost = np.dot(u, u)
     energy_cost = 0
@@ -165,13 +169,13 @@ class derivatives:
         n_u = 4
         self.x_sym = np.array([sym.Variable("x_{}".format(i)) for i in range(n_x)])
         self.u_sym = np.array([sym.Variable("u_{}".format(i)) for i in range(n_u)])
-        self.t_sym = np.array([sym.Variable("t")])
+        self.n_sym = np.array([sym.Variable("n")])
         x = self.x_sym
         u = self.u_sym
-        t = self.t_sym
+        n = self.n_sym
         self.N = N
 
-        l = trajectory_cost(pose_goal, x, u, t, N)
+        l = trajectory_cost(pose_goal, x, u, n, N)
         self.l_x = sym.Jacobian([l], x).ravel()
         self.l_u = sym.Jacobian([l], u).ravel()
         self.l_xx = sym.Jacobian(self.l_x, x)
@@ -182,15 +186,15 @@ class derivatives:
         self.l_final_x = sym.Jacobian([l_final], x).ravel()
         self.l_final_xx = sym.Jacobian(self.l_final_x, x)
 
-        f = discrete_dynamics(x, u, dt)
+        f = discrete_dynamics(x, u, n, dt)
         self.f_x = sym.Jacobian(f, x)
         self.f_u = sym.Jacobian(f, u)
 
-    def stage(self, x, u, t):
+    def stage(self, x, u, n):
         # Populate real values of x and u into symbolic variable
         env = {self.x_sym[i]: x[i] for i in range(x.shape[0])}
         env.update({self.u_sym[i]: u[i] for i in range(u.shape[0])})
-        env.update({self.t_sym[0]: t})
+        env.update({self.n_sym[0]: n})
 
         l_x = sym.Evaluate(self.l_x, env).ravel()
         l_u = sym.Evaluate(self.l_u, env).ravel()
@@ -316,7 +320,7 @@ def forward_pass(x_trj, u_trj, k_trj, K_trj, dt):
         du = k_trj[n] + K_trj[n] @ dx  #d u[n]* = k + K @ dx[n]
 
         u_trj_new[n,:] = u_trj[n,:] + du
-        x_trj_new[n+1,:] = discrete_dynamics(x_trj_new[n], u_trj_new[n], dt)
+        x_trj_new[n+1,:] = discrete_dynamics(x_trj_new[n], u_trj_new[n], n, dt)
 
     return x_trj_new, u_trj_new
 
