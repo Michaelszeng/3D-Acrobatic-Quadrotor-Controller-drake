@@ -27,7 +27,7 @@ import argparse
 import yaml
 
 from src.utils import *
-from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps, TrajectoryDesiredStateSource
+from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps_fixed_interval, TrajectoryDesiredStateSource
 from src.se3_leaf import SE3Controller
 
 meshcat = StartMeshcat()
@@ -51,9 +51,7 @@ rz0 = 0.0
 builder = DiagramBuilder()
 plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.0)
 parser = Parser(plant)
-(model_instance,) = parser.AddModelsFromUrl(
-    "package://drake/examples/quadrotor/quadrotor.urdf"
-)
+(model_instance,) = parser.AddModelsFromUrl("package://drake/examples/quadrotor/quadrotor.urdf")
 
 # Set up the floating base type for the quadrotor.
 AddFloatingRpyJoint(
@@ -62,6 +60,13 @@ AddFloatingRpyJoint(
     model_instance,
     use_ball_rpy=False
 )
+
+# Add visual quadrotor to show the desired pose of the main quadrotor
+parser.AddModelsFromUrl(f"file://{os.path.abspath('visual_quadrotor.urdf')}")
+visual_quadrotor_pose = RigidTransform(RollPitchYaw(np.array([rx0, ry0, rz0])), np.array([x0, y0, z0]))
+plant.SetDefaultFreeBodyPose(plant.GetBodyByName("visual_quadrotor_base_link"), visual_quadrotor_pose)
+plant.WeldFrames(plant.world_frame(), plant.GetFrameByName("visual_quadrotor_base_link"))
+
 plant.Finalize()
 
 # Set up the propellers to generate spatial force on quadrotor
@@ -140,10 +145,10 @@ plant.GetJointByName("rz").set_angle(plant_context, rz0)  # Yaw
 ##### Run Trajectory Optimization
 ################################################################################
 # Solve for trajectory
+N=20
 pose_goal = np.array([0, 0, 0, 0, 0, 0])
-# x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, N = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal)
-N=16
-x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
+x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
+# x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 
 print(f"{N=}\n")
 print(f"{x_trj=}\n")
@@ -158,6 +163,7 @@ pos_3d_matrix = x_trj[:,:3].T
 # print(f"{pos_3d_matrix.T=}")
 meshcat.SetLine("ddp traj", pos_3d_matrix)
 
+# desired_state_source.set_time_interval(dt)
 # desired_state_source.GetInputPort("trajectory").FixValue(x_trj)
 
 

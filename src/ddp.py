@@ -55,7 +55,7 @@ def continuous_dynamics(x, u):
     return np.concatenate((p_dot, v_dot.flatten(), R_dot.flatten(), W_dot)), R, W
 
 
-def discrete_dynamics(x, u):
+def discrete_dynamics(x, u, dt):
     """
     Calculates next state based on current state and control input, using
     continuous dynamics.
@@ -79,7 +79,7 @@ def discrete_dynamics(x, u):
     return np.concatenate((x[:6]+x_dot[:6]*dt, R_new.flatten(), x[15:]+x_dot[15:]*dt))
 
 
-def dynamics_rollout(x0, u_trj):
+def dynamics_rollout(x0, u_trj, dt):
     """
     Computes x_trj, the state trajectory, given a sequence of control inputs.
 
@@ -91,7 +91,7 @@ def dynamics_rollout(x0, u_trj):
 
     x_trj = [x0]
     for i in range(N):
-        x_trj.append(discrete_dynamics(x_trj[-1], u_trj[i]))
+        x_trj.append(discrete_dynamics(x_trj[-1], u_trj[i], dt))
 
     return np.array(x_trj)
 
@@ -160,7 +160,7 @@ def cost_trj(pose_goal, x_trj, u_trj):
 
 
 class derivatives:
-    def __init__(self, pose_goal, discrete_dynamics, trajectory_cost, terminal_cost, N):
+    def __init__(self, pose_goal, discrete_dynamics, trajectory_cost, terminal_cost, N, dt):
         n_x = 18
         n_u = 4
         self.x_sym = np.array([sym.Variable("x_{}".format(i)) for i in range(n_x)])
@@ -182,7 +182,7 @@ class derivatives:
         self.l_final_x = sym.Jacobian([l_final], x).ravel()
         self.l_final_xx = sym.Jacobian(self.l_final_x, x)
 
-        f = discrete_dynamics(x, u)
+        f = discrete_dynamics(x, u, dt)
         self.f_x = sym.Jacobian(f, x)
         self.f_u = sym.Jacobian(f, u)
 
@@ -297,7 +297,7 @@ def expected_cost_reduction(Q_u, Q_uu, k):
     return -Q_u.T.dot(k) - 0.5 * k.T.dot(Q_uu.dot(k))
 
 
-def forward_pass(x_trj, u_trj, k_trj, K_trj):
+def forward_pass(x_trj, u_trj, k_trj, K_trj, dt):
     """
     Apply optimal control actions computed in the back pass to find a new
     nominal x and u trajectory.
@@ -316,7 +316,7 @@ def forward_pass(x_trj, u_trj, k_trj, K_trj):
         du = k_trj[n] + K_trj[n] @ dx  #d u[n]* = k + K @ dx[n]
 
         u_trj_new[n,:] = u_trj[n,:] + du
-        x_trj_new[n+1,:] = discrete_dynamics(x_trj_new[n], u_trj_new[n])
+        x_trj_new[n+1,:] = discrete_dynamics(x_trj_new[n], u_trj_new[n], dt)
 
     return x_trj_new, u_trj_new
 
@@ -356,7 +356,7 @@ def backward_pass(derivs, x_trj, u_trj, regu):
     return k_trj, K_trj, expected_cost_redu
 
 
-def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=200, regu_init=100):
+def solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, dt, max_iter=200, regu_init=100):
     """
     x0 is the Drake default [x, y, z, R, P, Y, x_dot, y_dot, z_dot, R_dot, P_dot, Y_dot] state vector.
 
@@ -369,7 +369,7 @@ def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=200, regu_init=1
     Rf = euler_to_rotation_matrix(pose_goal[3:6])
     xf = np.concatenate((pose_goal[:3], np.zeros(3), Rf.flatten(), np.zeros(3)))
 
-    derivs = derivatives(pose_goal, discrete_dynamics, trajectory_cost, terminal_cost, N)
+    derivs = derivatives(pose_goal, discrete_dynamics, trajectory_cost, terminal_cost, N, dt)
 
     # u_trj = np.random.randn(N - 1, n_u) * 0.0001
     # x_trj = dynamics_rollout(x0, u_trj)
@@ -385,7 +385,7 @@ def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=200, regu_init=1
     # Initial Guesses for trajectory
     u_trj = np.ones((N - 1, n_u)) * (-m * g / 4)
     # u_trj = np.random.randn(N - 1, n_u) * 0.0001
-    x_trj = dynamics_rollout(x0, u_trj)
+    x_trj = dynamics_rollout(x0, u_trj, dt)
     total_cost = cost_trj(pose_goal, x_trj, u_trj)
 
     regu = regu_init
@@ -403,7 +403,7 @@ def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=200, regu_init=1
     for i in range(max_iter):
         # Backward and forward pass
         k_trj, K_trj, expected_cost_redu = backward_pass(derivs, x_trj, u_trj, regu)
-        x_trj_new, u_trj_new = forward_pass(x_trj, u_trj, k_trj, K_trj)
+        x_trj_new, u_trj_new = forward_pass(x_trj, u_trj, k_trj, K_trj, dt)
 
         # Evaluate new trajectory
         total_cost = cost_trj(pose_goal, x_trj_new, u_trj_new)
@@ -436,22 +436,23 @@ def solve_trajectory_fixed_timesteps(x0, pose_goal, N, max_iter=200, regu_init=1
     return x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace
 
 
-def solve_trajectory(x0, pose_goal):
+def solve_trajectory(x0, pose_goal, N):
     """
     Perform Linear Search in time dimension to find optimal number of time steps.
     """
     min_cost = np.inf
     min_cost_traj = []
-    min_cost_time_steps = 0
-    for i in range(3, 20):
-        x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(x0, pose_goal, i)
-        print(f"====================================={i}-step cost: {cost_trace[-1]}=====================================")
+    min_cost_time_interval = 0
+    for i in np.linspace(0.025, 0.1, 3):
+        x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, i)
+        print(f"=====================================cost (dt={i}): {cost_trace[-1]}=====================================")
         if cost_trace[-1] <= min_cost:
+            print(f"step {i}: {cost_trace[-1]} <= current minimum: {min_cost}")
             min_cost = cost_trace[-1]
             min_cost_traj = [x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace]
-            min_cost_time_steps = i
+            min_cost_time_interval = i
 
-    return *min_cost_traj, min_cost_time_steps
+    return *min_cost_traj, min_cost_time_interval
 
 
 class TrajectoryDesiredStateSource(LeafSystem):
@@ -468,11 +469,16 @@ class TrajectoryDesiredStateSource(LeafSystem):
                                                                            BasicVector(18),
                                                                            self.CalcOutput)
         
+        self.dt = None
+
+    def set_time_interval(self, dt):
+        self.dt = dt
+        
     def CalcOutput(self, context, output):
         """
         Simply convert the state representation and set the output
         """
         traj = self.get_input_port(0).Eval(context)
 
-        desired_state = traj[int(context.get_time() / dt)]
+        desired_state = traj[int(context.get_time() / self.dt)]
         output.SetFromVector(desired_state)
