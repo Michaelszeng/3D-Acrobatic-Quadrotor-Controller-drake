@@ -1,8 +1,6 @@
 from pydrake.all import (
     RollPitchYaw,
     RigidTransform,
-    AbstractValue,
-    BasicVector,
 )
 
 import matplotlib as mpl
@@ -55,6 +53,13 @@ def continuous_dynamics(x, u):
     return np.concatenate((p_dot, v_dot.flatten(), R_dot.flatten(), W_dot)), R, W
 
 
+def compute_discrete_dynamics_time_step(n, dt_nominal):
+    # https://www.desmos.com/calculator/vegofqyne7
+    beta = 5
+    dt = 1/(beta*n + (1/dt_nominal)) + dt_nominal
+    return dt
+
+
 def discrete_dynamics(x, u, n, dt_nominal):
     """
     Calculates next state based on current state and control input, using
@@ -64,14 +69,9 @@ def discrete_dynamics(x, u, n, dt_nominal):
 
     x is the (18,) np vector containing the current state.
     """
-    # https://www.desmos.com/calculator/vegofqyne7
-    beta = 5
-    dt = 1/(beta*n + (1/dt_nominal)) + dt_nominal
+    dt = compute_discrete_dynamics_time_step(n, dt_nominal)
 
     x_dot, R, W = continuous_dynamics(x, u)
-
-    # x_new = x_dot*dt + x  # Euler Integration
-    # return x_new
 
     # Precise integration of rotation matrix to preserve orthogonality and det=1 using Exponential Map
     theta = np.linalg.norm(W + eps)  # add eps to prevent input to np.linalg.norm from going to 0 (np.linalg.norm becomes undifferentiable)
@@ -442,7 +442,8 @@ def solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, dt, max_it
 
 def solve_trajectory(x0, pose_goal, N):
     """
-    Perform Linear Search in time dimension to find optimal number of time steps.
+    Run iLQR to generat an optimal trajectory, while performing Linear Search to
+    find optimal time interval dt.
     """
     min_cost = np.inf
     min_cost_traj = []
@@ -463,33 +464,9 @@ def solve_trajectory(x0, pose_goal, N):
     # Error from taking norm of e_R (equation (8)) from Lee et al.
     final_rotation_error = np.linalg.norm(0.5 * vee_map(R_goal.T @ R - R.T @ R_goal))
 
-    return *min_cost_traj, min_cost_time_interval, final_translation_error, final_rotation_error
+    # Generate list of time steps corresponding to each x and u in the trajectory
+    dt_array = np.array([])
+    for n in range(N):
+       np.append(dt_array, compute_discrete_dynamics_time_step(n, min_cost_time_interval))
 
-
-class TrajectoryDesiredStateSource(LeafSystem):
-    def __init__(self):
-        LeafSystem.__init__(self)
-
-        # Input port for x_traj, computed by ddp
-        traj = AbstractValue.Make(np.array([]))
-        self.DeclareAbstractInputPort("trajectory", traj)
-        
-        # Define output port for desired drone state in SE(3) form:
-        # [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
-        self.output_port_drone_state_se3 = self.DeclareVectorOutputPort("trajectory_desired_state",
-                                                                           BasicVector(18),
-                                                                           self.CalcOutput)
-        
-        self.dt = None
-
-    def set_time_interval(self, dt):
-        self.dt = dt
-        
-    def CalcOutput(self, context, output):
-        """
-        Simply convert the state representation and set the output
-        """
-        traj = self.get_input_port(0).Eval(context)
-
-        desired_state = traj[int(context.get_time() / self.dt)]
-        output.SetFromVector(desired_state)
+    return *min_cost_traj, min_cost_time_interval, dt_array, final_translation_error, final_rotation_error

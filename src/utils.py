@@ -3,6 +3,7 @@ from pydrake.all import (
     Diagram,
     LeafSystem,
     BasicVector,
+    AbstractValue,
 )
 import pydrake.symbolic as sym
 
@@ -14,7 +15,7 @@ import numpy as np
 # Quadrotor Constants (derived from quadrotor MultibodyPlant)
 m = 0.775       # quadrotor mass
 L = 0.15        # distance from the center of mass to the center of each rotor in the b1, b2 plane
-kM = 0.0245     # relates propellers' torque generated to thrust generated
+kM = 0.0245     # relates moment applied to quadrotor to the thurst generated
 g = -9.81       # gravity
 I = np.array([[1.50000000e-03, 0.00000000e+00, 2.02795951e-16],
               [0.00000000e+00, 2.50000000e-03, 0.00000000e+00],
@@ -134,3 +135,46 @@ class StateConverter(LeafSystem):
 
         # Set output
         output.SetFromVector(drone_state_se3)
+
+
+
+class TrajectoryDesiredStateSource(LeafSystem):
+    def __init__(self):
+        LeafSystem.__init__(self)
+
+        # Input port for x_traj, computed by ddp
+        traj = AbstractValue.Make(np.array([]))
+        self.DeclareAbstractInputPort("trajectory", traj)
+        
+        # Define output port for desired drone state in SE(3) form:
+        # [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
+        self.output_port_drone_state_se3 = self.DeclareVectorOutputPort("trajectory_desired_state",
+                                                                           BasicVector(18),
+                                                                           self.CalcOutput)
+        
+        self.dt_array = None
+        self.n = 0
+        self.traj_elapsed_time = 0
+
+
+    def set_time_intervals(self, dt_array):
+        self.dt_array = dt_array
+        self.N = np.shape(dt_array)[0]
+        
+
+    def CalcOutput(self, context, output):
+        """
+        Simply convert the state representation and set the output
+        """
+        traj = self.get_input_port(0).Eval(context)
+
+        t = context.get_time()
+
+        self.n = min(self.n, self.N)
+
+        if t > self.traj_elapsed_time + self.dt_array[self.n]:
+            self.traj_elapsed_time += self.dt_array[self.n]
+            self.n += 1
+
+        desired_state = traj[self.n]
+        output.SetFromVector(desired_state)

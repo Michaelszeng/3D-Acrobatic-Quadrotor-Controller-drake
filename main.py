@@ -17,7 +17,6 @@ from pydrake.all import (
     namedview,
     JointSliders
 )
-from pydrake.examples import QuadrotorGeometry, QuadrotorPlant, StabilizingLQRController
 from underactuated.scenarios import AddFloatingRpyJoint
 
 import numpy as np
@@ -27,7 +26,7 @@ import argparse
 import yaml
 
 from src.utils import *
-from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps_fixed_interval, TrajectoryDesiredStateSource
+from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps_fixed_interval
 from src.se3_leaf import SE3Controller
 
 meshcat = StartMeshcat()
@@ -44,7 +43,7 @@ rx0 = 0.0
 ry0 = 0.0
 rz0 = 0.0
 
-pose_goal = np.array([0, 0, 2.0, 3.14, 0, 3.14])
+pose_goal = np.array([0, 0, 2.0, 3.14, 0, 1.57])
 
 
 ################################################################################
@@ -72,11 +71,12 @@ plant.Finalize()
 # Set up the propellers to generate spatial force on quadrotor
 body_index = plant.GetBodyByName("base_link").index()
 kF = 1.0  # Force input constant
+# Propellors 1 and 3 rotate CCW, 2 and 4 rotate CW
 prop_info = [
-    PropellerInfo(body_index, RigidTransform([L/np.sqrt(2), L/np.sqrt(2), 0]), kF, kM),
-    PropellerInfo(body_index, RigidTransform([-L/np.sqrt(2), L/np.sqrt(2), 0]), kF, -kM),
-    PropellerInfo(body_index, RigidTransform([-L/np.sqrt(2), -L/np.sqrt(2), 0]), kF, kM),
-    PropellerInfo(body_index, RigidTransform([L/np.sqrt(2), -L/np.sqrt(2), 0]), kF, -kM),
+    PropellerInfo(body_index, RigidTransform([L/np.sqrt(2), L/np.sqrt(2), 0]), kF, -kM),
+    PropellerInfo(body_index, RigidTransform([-L/np.sqrt(2), L/np.sqrt(2), 0]), kF, kM),
+    PropellerInfo(body_index, RigidTransform([-L/np.sqrt(2), -L/np.sqrt(2), 0]), kF, -kM),
+    PropellerInfo(body_index, RigidTransform([L/np.sqrt(2), -L/np.sqrt(2), 0]), kF, kM),
 ]
 propellers = builder.AddSystem(Propeller(prop_info))
 builder.Connect(
@@ -100,7 +100,7 @@ builder.Connect(
 #     se3_controller.GetInputPort("drone_state")
 # )
 # builder.Connect(
-#     desired_state_source.GetOutputPort("trajectory_desired_state")
+#     desired_state_source.GetOutputPort("trajectory_desired_state"),
 #     se3_controller.GetInputPort("x_trajectory")
 # )
 # builder.Connect(
@@ -150,10 +150,11 @@ plant.GetJointByName("rz").set_angle(plant_context, rz0)  # Yaw
 ################################################################################
 # Solve for trajectory
 N=20
-x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, final_translation_error, final_rotation_error = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
+x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 # x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 
 print(f"{dt=}\n")
+print(f"{dt_array=}\n")
 print(f"{x_trj=}\n")
 print(f"{u_trj=}\n")
 print(f"{cost_trace=}\n")
@@ -167,7 +168,7 @@ pos_3d_matrix = x_trj[:,:3].T
 # print(f"{pos_3d_matrix.T=}")
 meshcat.SetLine("ddp traj", pos_3d_matrix)
 
-# desired_state_source.set_time_interval(dt)
+# desired_state_source.set_time_intervals(dt_array)
 # desired_state_source.GetInputPort("trajectory").FixValue(x_trj)
 
 
