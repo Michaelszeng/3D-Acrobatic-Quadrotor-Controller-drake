@@ -44,7 +44,7 @@ rx0 = 0.0
 ry0 = 0.0
 rz0 = 0.0
 
-pose_goal = np.array([0, 0, 2.0, 0, 0, 0])
+pose_goal = np.array([0, 0, 2.0, 3.14, 0, 3.14])
 
 
 ################################################################################
@@ -153,7 +153,7 @@ N=20
 x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 # x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 
-print(f"{N=}\n")
+print(f"{dt=}\n")
 print(f"{x_trj=}\n")
 print(f"{u_trj=}\n")
 print(f"{cost_trace=}\n")
