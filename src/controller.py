@@ -81,10 +81,9 @@ class SE3Controller(LeafSystem):
         """
         # Retrieve input data from input ports
         drone_state = self.get_input_port(0).Eval(context)
+        print(drone_state)
         desired_state = self.get_input_port(1).Eval(context)
-
-        output.SetFromVector(np.zeros(4))
-        return
+        print(desired_state)
 
         if not np.any(self.prev_desired_state) is None and not np.all(np.isclose(desired_state, self.prev_desired_state)):
             # New desired_state has been received

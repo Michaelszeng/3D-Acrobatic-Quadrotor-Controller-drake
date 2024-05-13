@@ -51,7 +51,7 @@ pose_goal = np.array([0, 0, 0, 0, 0, 1.57])
 ##### Diagram Setup
 ################################################################################
 builder = DiagramBuilder()
-plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.0)
+plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
 parser = Parser(plant)
 (model_instance,) = parser.AddModelsFromUrl("package://drake/examples/quadrotor/quadrotor.urdf")
 
