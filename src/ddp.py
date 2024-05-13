@@ -372,7 +372,7 @@ def solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, dt, max_it
     """
     # First, convert Drake initial state representation to SE(3) form [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
     R0 = euler_to_rotation_matrix(x0[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
-    x0 = np.concatenate((x0[:3], x0[6:9], R0.flatten(), x0[9:12]))
+    x0 = np.concatenate((x0[:3], x0[6:9], R0.flatten(), x0[11:8:-1]))  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
 
     Rf = euler_to_rotation_matrix(pose_goal[3:6])
     xf = np.concatenate((pose_goal[:3], np.zeros(3), Rf.flatten(), np.zeros(3)))

@@ -130,7 +130,7 @@ class StateConverter(LeafSystem):
         drone_state = self.get_input_port(0).Eval(context)
 
         R = euler_to_rotation_matrix(drone_state[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
-        drone_state_se3 = np.concatenate((drone_state[:3], drone_state[6:9], R.flatten(), drone_state[9:]))
+        drone_state_se3 = np.concatenate((drone_state[:3], drone_state[6:9], R.flatten(), drone_state[11:8:-1]))  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
 
         # Set output
         output.SetFromVector(drone_state_se3)
@@ -170,7 +170,7 @@ class TrajectoryDesiredStateSource(LeafSystem):
 
         if t > self.traj_elapsed_time + self.dt_array[self.n]:
             self.traj_elapsed_time += self.dt_array[self.n]
-            self.n = max(self.n+1, self.N-1)  # prevent out of bounds error
+            self.n = min(self.n+1, self.N-1)  # prevent out of bounds error
             print(f"==========OUTPUTTING NEW DESIRED STATE: {traj[self.n]}==========")
 
         desired_state = traj[self.n]

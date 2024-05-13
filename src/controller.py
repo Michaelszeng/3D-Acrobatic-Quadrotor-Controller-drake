@@ -59,10 +59,14 @@ class SE3Controller(LeafSystem):
                                                                            self.CalcOutput)
         
         # Control gains (taken from Lee2011, arXiv:1003.2005v4)
-        self.kx = 16 * m
-        self.kv = 5.6 * m
-        self.kR = 8.81
-        self.kW = 2.54
+        # self.kx = 16 * m
+        # self.kv = 5.6 * m
+        # self.kR = 8.81
+        # self.kW = 2.54
+        self.kx = 16*m
+        self.kv = 5.6*m
+        self.kR = 0.01
+        self.kW = 0.0
 
         self.prev_desired_state = np.empty((18,))
         self.prev_desired_state.fill(np.nan)
@@ -86,18 +90,18 @@ class SE3Controller(LeafSystem):
         desired_state = self.get_input_port(1).Eval(context)
         print(desired_state)
 
-        if not np.any(np.isnan(self.prev_desired_state)) and not np.all(np.isclose(desired_state, self.prev_desired_state)):
-            # New desired_state has been received
-            t = context.get_time()
+        # if not np.any(np.isnan(self.prev_desired_state)) and not np.all(np.isclose(desired_state, self.prev_desired_state)):
+        #     # New desired_state has been received
+        #     t = context.get_time()
 
-            self.xd_ddot = (desired_state[:3] - self.prev_desired_state[:3]) / (t - self.prev_desired_state_t + eps)  # Difference Quotient
-            self.Wd_dot = (desired_state[15:] - self.prev_desired_state[15:]) / (t - self.prev_desired_state_t + eps)  # Difference Quotient
+        #     self.xd_ddot = (desired_state[:3] - self.prev_desired_state[:3]) / (t - self.prev_desired_state_t + eps)  # Difference Quotient
+        #     self.Wd_dot = (desired_state[15:] - self.prev_desired_state[15:]) / (t - self.prev_desired_state_t + eps)  # Difference Quotient
 
-            self.prev_desired_state = desired_state
-            self.prev_desired_state_t = t
+        #     self.prev_desired_state = desired_state
+        #     self.prev_desired_state_t = t
 
-            print(f"{self.xd_ddot=}")
-            print(f"{self.Wd_dot=}")
+        #     print(f"{self.xd_ddot=}")
+        #     print(f"{self.Wd_dot=}")
 
         # Drone current state
         x = drone_state[:3]
@@ -113,16 +117,16 @@ class SE3Controller(LeafSystem):
         xd_ddot = self.xd_ddot  # for convenience so I don't have to repeat `self.`
 
         # Rotation/Rotational velocity/Angular acceleration desired and error
-        A = -self.kx*e_x - self.kv*e_v + m*g*np.array([0,0,1]) + m*xd_ddot  # note that g is negative
-        # print(f"{A=}")
-        b3d = A / np.linalg.norm(A)                                          # b3d is determined by necesary heading to reach position setpoint
+        A = -self.kx*e_x - self.kv*e_v - m*g*np.array([0,0,1]) + m*xd_ddot  # note that g is negative
+        print(f"{A=}")
+        b3d = -A / np.linalg.norm(A)                                          # b3d is determined by necesary heading to reach position setpoint
         b1d = desired_state[6:15].reshape(3, 3) @ np.array([1, 0, 0])        # b1d is set by the DDP trajectory
         # print(f"{b1d=}")
         b2d = np.cross(b3d, b1d) / np.linalg.norm(np.cross(b3d, b1d))        # b2d is computed as cross product of b3d and Proj(b1d) onto the normal plane to b3d
         Rd_traj = desired_state[6:15].reshape(3, 3)
         Rd = np.concatenate((np.cross(b2d, b3d), b2d, b3d)).reshape(3, 3)
-        # print(f"{Rd=}")
-        # print(f"{Rd_traj=}")
+        print(f"{Rd=}")
+        print(f"{Rd_traj=}")
         Wd = desired_state[15:]
         e_R = 0.5 * vee_map(Rd.T @ R - R.T @ Rd)
         e_W = W - R.T @ Rd @ Wd
@@ -140,6 +144,7 @@ class SE3Controller(LeafSystem):
         # print(f"{M=}")
 
         u = np.linalg.inv(net_force_moments_matrix) @ np.concatenate(([f], M))
+        u = np.clip(u, -1e2, 1e2)
         # print(f"{u=}")
 
         # Set output
