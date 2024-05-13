@@ -64,7 +64,8 @@ class SE3Controller(LeafSystem):
         self.kR = 8.81
         self.kW = 2.54
 
-        self.prev_desired_state = np.array([None])
+        self.prev_desired_state = np.empty((18,))
+        self.prev_desired_state.fill(np.nan)
         self.prev_desired_state_t = 0
 
         self.xd_ddot = np.zeros(3)
@@ -85,13 +86,12 @@ class SE3Controller(LeafSystem):
         desired_state = self.get_input_port(1).Eval(context)
         print(desired_state)
 
-        if not np.any(self.prev_desired_state) is None and not np.all(np.isclose(desired_state, self.prev_desired_state)):
+        if not np.any(np.isnan(self.prev_desired_state)) and not np.all(np.isclose(desired_state, self.prev_desired_state)):
             # New desired_state has been received
             t = context.get_time()
 
-            if self.prev_desired_state is not None:
-                self.xd_ddot = (desired_state[:3] - self.prev_desired_state[:3]) / (t - self.prev_desired_state_t + eps)  # Difference Quotient
-                self.Wd_dot = (desired_state[15:] - self.prev_desired_state[15:]) / (t - self.prev_desired_state_t + eps)  # Difference Quotient
+            self.xd_ddot = (desired_state[:3] - self.prev_desired_state[:3]) / (t - self.prev_desired_state_t + eps)  # Difference Quotient
+            self.Wd_dot = (desired_state[15:] - self.prev_desired_state[15:]) / (t - self.prev_desired_state_t + eps)  # Difference Quotient
 
             self.prev_desired_state = desired_state
             self.prev_desired_state_t = t
@@ -113,7 +113,7 @@ class SE3Controller(LeafSystem):
         xd_ddot = self.xd_ddot  # for convenience so I don't have to repeat `self.`
 
         # Rotation/Rotational velocity/Angular acceleration desired and error
-        A = -self.kx*e_x - self.kv*e_v - m*g*np.array([0,0,1]) + m*xd_ddot
+        A = -self.kx*e_x - self.kv*e_v + m*g*np.array([0,0,1]) + m*xd_ddot
         # print(f"{A=}")
         b3d = A / np.linalg.norm(A)                                          # b3d is determined by necesary heading to reach position setpoint
         b1d = desired_state[6:15].reshape(3, 3) @ np.array([1, 0, 0])        # b1d is set by the DDP trajectory
