@@ -371,7 +371,7 @@ def solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, dt, max_it
     pose_goal is a [x, y, z, R, P, Y] vector.
     """
     # First, convert Drake initial state representation to SE(3) form [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
-    R0 = euler_to_rotation_matrix(x0[3:6])
+    R0 = euler_to_rotation_matrix(x0[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
     x0 = np.concatenate((x0[:3], x0[6:9], R0.flatten(), x0[9:12]))
 
     Rf = euler_to_rotation_matrix(pose_goal[3:6])
@@ -452,7 +452,8 @@ def solve_trajectory(x0, pose_goal, N, num_dt_to_search=3):
     min_cost = np.inf
     min_cost_traj = []
     min_cost_time_interval = 0
-    for i in np.linspace(0.025, 0.1, num_dt_to_search):
+    # for i in np.linspace(0.025, 0.1, num_dt_to_search):
+    for i in [0.1]:
         x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, i)
         print(f"=====================================cost (dt={i}): {cost_trace[-1]}=====================================")
         if cost_trace[-1] <= min_cost:

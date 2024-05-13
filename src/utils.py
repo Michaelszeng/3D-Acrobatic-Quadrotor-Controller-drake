@@ -129,7 +129,7 @@ class StateConverter(LeafSystem):
         # Retrieve input data from input ports
         drone_state = self.get_input_port(0).Eval(context)
 
-        R = euler_to_rotation_matrix(drone_state[3:6])
+        R = euler_to_rotation_matrix(drone_state[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
         drone_state_se3 = np.concatenate((drone_state[:3], drone_state[6:9], R.flatten(), drone_state[9:]))
 
         # Set output

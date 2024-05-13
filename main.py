@@ -27,7 +27,8 @@ import yaml
 
 from src.utils import *
 from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps_fixed_interval
-from src.se3_leaf import SE3Controller
+# from src.se3_leaf import SE3Controller
+from src.controller import SE3Controller
 
 meshcat = StartMeshcat()
 
@@ -55,6 +56,7 @@ parser = Parser(plant)
 (model_instance,) = parser.AddModelsFromUrl("package://drake/examples/quadrotor/quadrotor.urdf")
 
 # Set up the floating base type for the quadrotor.
+# NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
 AddFloatingRpyJoint(
     plant,
     plant.GetFrameByName("base_link"),
@@ -184,7 +186,7 @@ t = 0
 meshcat.StartRecording()
 simulator.set_target_realtime_rate(1.0)
 
-# # Testing DDP with open-loop control
+# Testing DDP with open-loop control
 # for i in range(np.shape(u_trj)[0]):
 #     propellers.get_command_input_port().FixValue(propellers_context, u_trj[i])
 #     t += dt
