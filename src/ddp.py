@@ -193,6 +193,10 @@ class derivatives:
         f = discrete_dynamics(x, u, n, dt)
         self.f_x = sym.Jacobian(f, x)
         self.f_u = sym.Jacobian(f, u)
+        print(self.f_x)
+        self.f_xx = self.f_x.Differentiate(x)
+        self.f_ux = self.f_u.Differentiate(x)
+        self.f_uu = self.f_u.Differentiate(u)
 
     def stage(self, x, u, n):
         # Populate real values of x and u into symbolic variable
@@ -208,8 +212,11 @@ class derivatives:
 
         f_x = sym.Evaluate(self.f_x, env)
         f_u = sym.Evaluate(self.f_u, env)
+        f_xx = sym.Evaluate(self.f_xx, env)
+        f_ux = sym.Evaluate(self.f_ux, env)
+        f_uu = sym.Evaluate(self.f_uu, env)
 
-        return l_x, l_u, l_xx, l_ux, l_uu, f_x, f_u
+        return l_x, l_u, l_xx, l_ux, l_uu, f_x, f_u, f_xx, f_ux, f_uu
 
     def final(self, x):
         env = {self.x_sym[i]: x[i] for i in range(x.shape[0])}
@@ -220,7 +227,7 @@ class derivatives:
         return l_final_x, l_final_xx
 
 
-def Q_terms(l_x, l_u, l_xx, l_ux, l_uu, f_x, f_u, V_x, V_xx):
+def Q_terms(l_x, l_u, l_xx, l_ux, l_uu, f_x, f_u, f_xx, f_ux, f_uu, V_x, V_xx):
     """
     Compute partial derivatives of the Q-function.
 
@@ -244,12 +251,15 @@ def Q_terms(l_x, l_u, l_xx, l_ux, l_uu, f_x, f_u, V_x, V_xx):
     # print(f"np.shape(f_u): {np.shape(f_u)}")
     # print(f"np.shape(V_x): {np.shape(V_x)}")
     # print(f"np.shape(V_xx): {np.shape(V_xx)}")
+    print(f"np.shape(f_xx): {np.shape(f_xx)}")
+    print(f"np.shape(f_ux): {np.shape(f_ux)}")
+    print(f"np.shape(f_uu): {np.shape(f_uu)}")
 
     Q_x = l_x.T + V_x.T @ f_x
     Q_u = l_u.T + V_x.T @ f_u
-    Q_xx = l_xx + f_x.T @ V_xx @ f_x
-    Q_ux = l_ux + f_u.T @ V_xx @ f_x   # also works: (l_ux.T + f_x.T @ V_xx @ f_u).T
-    Q_uu = l_uu + f_u.T @ V_xx @ f_u
+    Q_xx = l_xx + f_x.T @ V_xx @ f_x + V_x.T @ f_xx
+    Q_ux = l_ux + f_u.T @ V_xx @ f_x + V_x.T @ f_ux
+    Q_uu = l_uu + f_u.T @ V_xx @ f_u + V_x.T @ f_uu
     return Q_x, Q_u, Q_xx, Q_ux, Q_uu
 
 
@@ -279,10 +289,10 @@ def V_terms(Q_x, Q_u, Q_xx, Q_ux, Q_uu, K, k):
     # print(f"np.shape(K): {np.shape(K)}")
     # print(f"np.shape(k): {np.shape(k)}")
 
-    #18x1  1x18    4x1  2x5  1x2   2x5    1x2   2x2   2x5
+    #18x1  1x18    4x1    4x18 1x4   4x18   1x4   4x4   4x18
     V_x = (Q_x.T + Q_u.T @ K + k.T @ Q_ux + k.T @ Q_uu @ K).T
 
-    #5x5   5x5    5x2     2x5  5x2   2x5    5x2   2x2   2x5
+    #18x18 18x18  18x4    4x18 18x4  4x18   18x4  4x4   4x18
     V_xx = Q_xx + Q_ux.T @ K + K.T @ Q_ux + K.T @ Q_uu @ K
 
     return V_x, V_xx
@@ -300,7 +310,15 @@ def gains(Q_uu, Q_u, Q_ux):
 
 def expected_cost_reduction(Q_u, Q_uu, k):
     """
-    Expected cost reduction of an of back/forward passes.
+    Expected cost reduction during one time step in on iteration of a backward 
+    pass.
+
+    This is equation comes from the difference between the quadratic 
+    approximations of the Q-function when dx=0 and du=du*, and when dx=0 and 
+    du=0, which represents the chance in the Q-function from applying the 
+    optimal control to the nominal trajectory.
+
+    https://github.com/Michaelszeng/6.8210-Underactuated-Robotics-Notes/blob/cbb740e7fbbcff3e6a82e1b8196b9df236a80e30/5)%20Trajectory%20Optimization.md?plain=1#L361
     """
     return -Q_u.T.dot(k) - 0.5 * k.T.dot(Q_uu.dot(k))
 
@@ -346,8 +364,8 @@ def backward_pass(derivs, x_trj, u_trj, regu):
 
     # Reverse iterate from trajectory end to start
     for n in range(u_trj.shape[0] - 1, -1, -1):
-        l_x, l_u, l_xx, l_ux, l_uu, f_x, f_u = derivs.stage(x_trj[n], u_trj[n], n)
-        Q_x, Q_u, Q_xx, Q_ux, Q_uu = Q_terms(l_x, l_u, l_xx, l_ux, l_uu, f_x, f_u, V_x, V_xx)
+        l_x, l_u, l_xx, l_ux, l_uu, f_x, f_u, f_xx, f_ux, f_uu = derivs.stage(x_trj[n], u_trj[n], n)
+        Q_x, Q_u, Q_xx, Q_ux, Q_uu = Q_terms(l_x, l_u, l_xx, l_ux, l_uu, f_x, f_u, f_xx, f_ux, f_uu, V_x, V_xx)
 
         # Add regularization to ensure that Q_uu is invertible and nicely conditioned
         Q_uu_regu = Q_uu + np.eye(Q_uu.shape[0]) * regu

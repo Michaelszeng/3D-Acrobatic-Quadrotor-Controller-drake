@@ -97,22 +97,22 @@ builder.Connect(
 se3_controller = builder.AddSystem(SE3Controller())
 state_converter = builder.AddSystem(StateConverter())
 desired_state_source = builder.AddSystem(TrajectoryDesiredStateSource())
-builder.Connect(
-    plant.GetOutputPort("quadrotor_state"),
-    state_converter.GetInputPort("drone_state")
-)
-builder.Connect(
-    state_converter.GetOutputPort("drone_state_se3"),
-    se3_controller.GetInputPort("drone_state")
-)
-builder.Connect(
-    desired_state_source.GetOutputPort("trajectory_desired_state"),
-    se3_controller.GetInputPort("x_trajectory")
-)
-builder.Connect(
-    se3_controller.GetOutputPort("controller_output"),
-    propellers.get_command_input_port()
-)
+# builder.Connect(
+#     plant.GetOutputPort("quadrotor_state"),
+#     state_converter.GetInputPort("drone_state")
+# )
+# builder.Connect(
+#     state_converter.GetOutputPort("drone_state_se3"),
+#     se3_controller.GetInputPort("drone_state")
+# )
+# builder.Connect(
+#     desired_state_source.GetOutputPort("trajectory_desired_state"),
+#     se3_controller.GetInputPort("x_trajectory")
+# )
+# builder.Connect(
+#     se3_controller.GetOutputPort("controller_output"),
+#     propellers.get_command_input_port()
+# )
 
 
 ### TEMPORARY: CONSTANT CONTROL INPUT = mg ###
@@ -175,8 +175,8 @@ pos_3d_matrix = x_trj[:,:3].T
 # print(f"{pos_3d_matrix.T=}")
 meshcat.SetLine("ddp traj", pos_3d_matrix)
 
-desired_state_source.set_time_intervals(dt_array)
-desired_state_source.GetInputPort("trajectory").FixValue(desired_state_source_context, x_trj)
+# desired_state_source.set_time_intervals(dt_array)
+# desired_state_source.GetInputPort("trajectory").FixValue(desired_state_source_context, x_trj)
 
 
 # Run the simulation
@@ -184,11 +184,11 @@ t = 0
 meshcat.StartRecording()
 simulator.set_target_realtime_rate(1.0)
 
-# # Testing DDP with open-loop control
-# for i in range(np.shape(u_trj)[0]):
-#     propellers.get_command_input_port().FixValue(propellers_context, u_trj[i])
-#     t += dt
-#     simulator.AdvanceTo(t)
+# Testing DDP with open-loop control
+for i in range(np.shape(u_trj)[0]):
+    propellers.get_command_input_port().FixValue(propellers_context, u_trj[i])
+    t += dt
+    simulator.AdvanceTo(t)
 
 simulator.AdvanceTo(5)
 
