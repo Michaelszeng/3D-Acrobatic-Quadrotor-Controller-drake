@@ -124,7 +124,7 @@ class SE3Controller(LeafSystem):
         # print(f"{b1d=}")
         b2d = np.cross(b3d, b1d) / np.linalg.norm(np.cross(b3d, b1d))        # b2d is computed as cross product of b3d and Proj(b1d) onto the normal plane to b3d
         Rd_traj = desired_state[6:15].reshape(3, 3)
-        Rd = np.concatenate((np.cross(b2d, b3d), b2d, b3d)).reshape(3, 3)
+        Rd = np.hstack((np.cross(b2d, b3d).reshape((3, 1)), b2d.reshape((3, 1)), b3d.reshape((3, 1))))
         print(f"{Rd=}")
         print(f"{Rd_traj=}")
         Wd = desired_state[15:]
