@@ -60,7 +60,7 @@ def continuous_dynamics(x, u):
 def compute_discrete_dynamics_time_step(n, dt_nominal):
     # https://www.desmos.com/calculator/vegofqyne7
     beta = 5
-    dt = 1/(beta*n + (1/dt_nominal)) + dt_nominal
+    dt = -1/(beta*(n+0.5) + (1/dt_nominal)) + dt_nominal
     return dt
 
 

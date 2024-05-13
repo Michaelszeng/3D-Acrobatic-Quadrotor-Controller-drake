@@ -170,7 +170,9 @@ class TrajectoryDesiredStateSource(LeafSystem):
 
         if t > self.traj_elapsed_time + self.dt_array[self.n]:
             self.traj_elapsed_time += self.dt_array[self.n]
-            self.n += 1
+            self.n = max(self.n+1, self.N-1)  # prevent out of bounds error
+            print(f"==========OUTPUTTING NEW DESIRED STATE: {traj[self.n]}==========")
 
         desired_state = traj[self.n]
+        np.set_printoptions(precision=3)
         output.SetFromVector(desired_state)
