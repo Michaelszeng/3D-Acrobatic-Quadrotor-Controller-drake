@@ -2,6 +2,8 @@ import numpy as np
 from numpy.linalg import inv
 from pydrake.systems.framework import LeafSystem, BasicVector
 
+from src.utils import *
+
 class DirtyDerivative:
     def __init__(self, order, tau, Ts):
         self.tau = tau
@@ -31,21 +33,19 @@ class SE3Controller(LeafSystem):
         LeafSystem.__init__(self)
         
         # Define input port for the current state of the drone
-        self.input_port_drone_state = self.DeclareInputPort("drone_state", 
-                                                             BasicVector(18))  #[x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
+        self.input_port_drone_state = self.DeclareVectorInputPort("drone_state", 18)  # [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
 
         # Define input port for the trajectory from the DDP solver
-        self.input_port_x_trajectory = self.DeclareInputPort("x_trajectory", 
-                                                                BasicVector(18))  # x_traj matrix [18, N] 
-        
-        # Define input port for the current time
-        self.input_port_time = self.DeclareInputPort("time", 
-                                                      BasicVector(1))  # time
+        self.input_port_x_trajectory = self.DeclareVectorInputPort("x_trajectory", 18)
         
         # Define output port for the controller output
         self.output_port_controller_output = self.DeclareVectorOutputPort("controller_output",
-                                                                           BasicVector(34),  # 4 for forces, 3 for moments, 3 for xd, 3 for xd_1dot, 3 for Omegac, 1 for Psi, 18 for deltaF
+                                                                           4,
                                                                            self.CalcOutput)
+
+        # physical parameters of airframe
+        self.gravity = 9.81
+        self.mass = 0.775
 
         # parameters of the drone
         # Control gains (taken from Lee2011, arXiv:1003.2005v4)
@@ -64,13 +64,10 @@ class SE3Controller(LeafSystem):
         self.tau = 0.05
         self.Ts = 0.01
         self.Mix = inv(np.array([[1, 1, 1, 1],
-                   [0, -self.d, 0, self.d],
-                   [self.d, 0, -self.d, 0],
-                   [-self.c_tauf, self.c_tauf, -self.c_tauf, self.c_tauf]]))
-        
-        # physical parameters of airframe
-        self.gravity = 9.81
-        self.mass = 0.775
+                                [0, L, 0, -L],
+                                [-L, 0, L, 0],
+                                [kM, -kM, kM, -kM]])
+)
 
         self.dx1dt = DirtyDerivative(1, 0.05, 0.01)
         self.dx2dt = DirtyDerivative(2, 0.5, 0.01)
@@ -92,10 +89,9 @@ class SE3Controller(LeafSystem):
             output: The output port to which the computed controller output is set.
         """
         # Retrieve input data from input ports
-        drone_state = self.input_port_drone_state.Eval(context)
-        u_trajectory = self.input_port_u_trajectory.Eval(context)
-        x_trajectory = self.input_port_x_trajectory.Eval(context)
-        time = self.input_port_time.Eval(context)
+        drone_state = self.get_input_port(0).Eval(context)
+        x_trajectory = self.get_input_port(1).Eval(context)
+        time = context.get_time()
         
         #not sure if needed, assumed for se(3) closed loop
         # Update internal state based on current input and possibly previous state
@@ -104,9 +100,12 @@ class SE3Controller(LeafSystem):
         # Compute control output based on updated internal state and other inputs
         # controller_output = self.compute_control_output(updated_controller_state, drone_state, u_trajectory, x_trajectory, time)
         controller_output = self.compute_control_output(drone_state, x_trajectory, time)
+        
+        f_and_M = controller_output[:4]
+        u = self.Mix @ f_and_M  # eq 1
 
         # Set output
-        output.SetFromVector(controller_output)
+        output.SetFromVector(u)
 
     def vee(self, ss):
         """
@@ -173,21 +172,23 @@ class SE3Controller(LeafSystem):
             controller_output: Output vector containing forces, moments, desired state, Omegac, Psi, and deltaF.
         """
         # current states
-        position = drone_state[:3]
-        velocity = drone_state[3:6]
-        rot_matrix = drone_state[6:15].reshape(3, 3)
-        Omega = drone_state[15:]
+        position = drone_state[:3].reshape((3,1))
+        velocity = drone_state[3:6].reshape((3,1))
+        rot_matrix = inv(drone_state[6:15].reshape(3, 3))
+        Omega = drone_state[15:].reshape((3,1))
 
         # desired x,y,z position
-        xd = x_trajectory[:3]
+        xd = x_trajectory[:3].reshape((3,1))
         # desired b1 direction
-        rot_45_b3 = np.array([
-                    [np.cos(np.pi/4), -np.sin(np.pi/4), 0],
-                    [np.sin(np.pi/4), np.cos(np.pi/4), 0],
-                    [0, 0, 1]
-                ])
+        # rot_45_b3 = np.array([
+        #             [np.cos(np.pi/4), -np.sin(np.pi/4), 0],
+        #             [np.sin(np.pi/4), np.cos(np.pi/4), 0],
+        #             [0, 0, 1]
+        #         ])
+        # Rd = x_trajectory[6:15].reshape(3, 3)
+        # b1d = inv(Rd) @ rot_45_b3 @ np.array([1, 0, 0])  # accounts for difference in body-frame definition between drake and Lee et al.
         Rd = x_trajectory[6:15].reshape(3, 3)
-        b1d = inv(Rd) @ rot_45_b3 @ np.array([1, 0, 0])  # accounts for difference in body-frame definition between drake and Lee et al.
+        b1d = inv(Rd) @ np.array([[1], [0], [0]])
         
         # feels redundant
         if time == 0:
@@ -227,7 +228,7 @@ class SE3Controller(LeafSystem):
 
         # thrust magnitude control, eq 19
         A = -self.kx * ex - self.kv * ev - self.mass * self.gravity * e3 + self.mass * xd_2dot
-        f = -np.dot(A.T, self.dot(e3))
+        f = -np.dot(A.T, rot_matrix @ e3)
 
         # normalized feedback function, eq 23
         b3c = -A / np.linalg.norm(A)

@@ -43,7 +43,7 @@ rx0 = 0.0
 ry0 = 0.0
 rz0 = 0.0
 
-pose_goal = np.array([0, 0, 2.0, 3.14, 0, 1.57])
+pose_goal = np.array([0, 0, 0, 0, 0, 1.57])
 
 
 ################################################################################
@@ -71,12 +71,18 @@ plant.Finalize()
 # Set up the propellers to generate spatial force on quadrotor
 body_index = plant.GetBodyByName("base_link").index()
 kF = 1.0  # Force input constant
-# Propellors 1 and 3 rotate CCW, 2 and 4 rotate CW
+# Propellors 1 and 3 rotate CW, 2 and 4 rotate CCW
+# prop_info = [
+#     PropellerInfo(body_index, RigidTransform([L/np.sqrt(2), L/np.sqrt(2), 0]), kF, -kM),
+#     PropellerInfo(body_index, RigidTransform([-L/np.sqrt(2), L/np.sqrt(2), 0]), kF, kM),
+#     PropellerInfo(body_index, RigidTransform([-L/np.sqrt(2), -L/np.sqrt(2), 0]), kF, -kM),
+#     PropellerInfo(body_index, RigidTransform([L/np.sqrt(2), -L/np.sqrt(2), 0]), kF, kM),
+# ]
 prop_info = [
-    PropellerInfo(body_index, RigidTransform([L/np.sqrt(2), L/np.sqrt(2), 0]), kF, -kM),
-    PropellerInfo(body_index, RigidTransform([-L/np.sqrt(2), L/np.sqrt(2), 0]), kF, kM),
-    PropellerInfo(body_index, RigidTransform([-L/np.sqrt(2), -L/np.sqrt(2), 0]), kF, -kM),
-    PropellerInfo(body_index, RigidTransform([L/np.sqrt(2), -L/np.sqrt(2), 0]), kF, kM),
+    PropellerInfo(body_index, RigidTransform([L, 0, 0]), kF, kM),
+    PropellerInfo(body_index, RigidTransform([0, L, 0]), kF, -kM),
+    PropellerInfo(body_index, RigidTransform([-L, 0, 0]), kF, kM),
+    PropellerInfo(body_index, RigidTransform([0, -L, 0]), kF, -kM),
 ]
 propellers = builder.AddSystem(Propeller(prop_info))
 builder.Connect(
@@ -88,32 +94,32 @@ builder.Connect(
     propellers.get_body_poses_input_port()
 )
 
-# se3_controller = builder.AddSystem(SE3Controller())
-# state_converter = builder.AddSystem(StateConverter())
-# desired_state_source = builder.AddSystem(TrajectoryDesiredStateSource())
-# builder.Connect(
-#     plant.GetOutputPort("quadrotor_state"),
-#     state_converter.GetInputPort("drone_state")
-# )
-# builder.Connect(
-#     state_converter.GetOutputPort("drone_state_se3"),
-#     se3_controller.GetInputPort("drone_state")
-# )
-# builder.Connect(
-#     desired_state_source.GetOutputPort("trajectory_desired_state"),
-#     se3_controller.GetInputPort("x_trajectory")
-# )
-# builder.Connect(
-#     se3_controller.GetOutputPort("controller_output"),
-#     propellers.get_command_input_port()
-# )
+se3_controller = builder.AddSystem(SE3Controller())
+state_converter = builder.AddSystem(StateConverter())
+desired_state_source = builder.AddSystem(TrajectoryDesiredStateSource())
+builder.Connect(
+    plant.GetOutputPort("quadrotor_state"),
+    state_converter.GetInputPort("drone_state")
+)
+builder.Connect(
+    state_converter.GetOutputPort("drone_state_se3"),
+    se3_controller.GetInputPort("drone_state")
+)
+builder.Connect(
+    desired_state_source.GetOutputPort("trajectory_desired_state"),
+    se3_controller.GetInputPort("x_trajectory")
+)
+builder.Connect(
+    se3_controller.GetOutputPort("controller_output"),
+    propellers.get_command_input_port()
+)
 
 
 ### TEMPORARY: CONSTANT CONTROL INPUT = mg ###
-g = plant.gravity_field().gravity_vector()[2]
-constant_thrust_command = [-m * g / 4] * 4
-constant_input_source = builder.AddSystem(ConstantVectorSource(constant_thrust_command))
-builder.Connect(constant_input_source.get_output_port(), propellers.get_command_input_port())
+# g = plant.gravity_field().gravity_vector()[2]
+# constant_thrust_command = [-m * g / 4] * 4
+# constant_input_source = builder.AddSystem(ConstantVectorSource(constant_thrust_command))
+# builder.Connect(constant_input_source.get_output_port(), propellers.get_command_input_port())
 
 MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
 
@@ -129,6 +135,7 @@ simulator = Simulator(diagram)
 context = simulator.get_mutable_context()
 plant_context = plant.GetMyMutableContextFromRoot(context)
 propellers_context = propellers.GetMyMutableContextFromRoot(context)
+desired_state_source_context = desired_state_source.GetMyMutableContextFromRoot(context)
 
 # Set visual quadrotor position
 plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("visual_quadrotor_base_link"), visual_quadrotor_pose)
@@ -149,7 +156,7 @@ plant.GetJointByName("rz").set_angle(plant_context, rz0)  # Yaw
 ##### Run Trajectory Optimization
 ################################################################################
 # Solve for trajectory
-N=20
+N=20  # Number of time steps in trajectory
 x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 # x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 
@@ -168,8 +175,8 @@ pos_3d_matrix = x_trj[:,:3].T
 # print(f"{pos_3d_matrix.T=}")
 meshcat.SetLine("ddp traj", pos_3d_matrix)
 
-# desired_state_source.set_time_intervals(dt_array)
-# desired_state_source.GetInputPort("trajectory").FixValue(x_trj)
+desired_state_source.set_time_intervals(dt_array)
+desired_state_source.GetInputPort("trajectory").FixValue(desired_state_source_context, x_trj)
 
 
 # Run the simulation
@@ -177,10 +184,12 @@ t = 0
 meshcat.StartRecording()
 simulator.set_target_realtime_rate(1.0)
 
-# Testing DDP with open-loop control
-for i in range(np.shape(u_trj)[0]):
-    propellers.get_command_input_port().FixValue(propellers_context, u_trj[i])
-    t += dt
-    simulator.AdvanceTo(t)
+# # Testing DDP with open-loop control
+# for i in range(np.shape(u_trj)[0]):
+#     propellers.get_command_input_port().FixValue(propellers_context, u_trj[i])
+#     t += dt
+#     simulator.AdvanceTo(t)
+
+simulator.AdvanceTo(5)
 
 meshcat.PublishRecording()

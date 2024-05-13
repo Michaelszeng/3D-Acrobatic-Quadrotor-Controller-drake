@@ -29,10 +29,14 @@ def continuous_dynamics(x, u):
      - W = angular velocity \in R3
     """    
     # [f, M1, M2, M3].T
+    # net_force_moments_vector = np.array([[1, 1, 1, 1],
+    #                                      [L/np.sqrt(2), L/np.sqrt(2), -L/np.sqrt(2), -L/np.sqrt(2)],
+    #                                      [-L/np.sqrt(2), L/np.sqrt(2), L/np.sqrt(2), -L/np.sqrt(2)],
+    #                                      [-kM, kM, -kM, kM]]) @ u
     net_force_moments_vector = np.array([[1, 1, 1, 1],
-                                         [L/np.sqrt(2), L/np.sqrt(2), -L/np.sqrt(2), -L/np.sqrt(2)],
-                                         [-L/np.sqrt(2), L/np.sqrt(2), L/np.sqrt(2), -L/np.sqrt(2)],
-                                         [-kM, kM, -kM, kM]]) @ u
+                                         [0, L, 0, -L],
+                                         [-L, 0, L, 0],
+                                         [kM, -kM, kM, -kM]]) @ u
 
     # scalar net force in -b3 direction 
     f = net_force_moments_vector[0]
@@ -440,7 +444,7 @@ def solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, dt, max_it
     return x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace
 
 
-def solve_trajectory(x0, pose_goal, N):
+def solve_trajectory(x0, pose_goal, N, num_dt_to_search=3):
     """
     Run iLQR to generat an optimal trajectory, while performing Linear Search to
     find optimal time interval dt.
@@ -448,7 +452,7 @@ def solve_trajectory(x0, pose_goal, N):
     min_cost = np.inf
     min_cost_traj = []
     min_cost_time_interval = 0
-    for i in np.linspace(0.025, 0.1, 3):
+    for i in np.linspace(0.025, 0.1, num_dt_to_search):
         x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, i)
         print(f"=====================================cost (dt={i}): {cost_trace[-1]}=====================================")
         if cost_trace[-1] <= min_cost:
@@ -465,8 +469,8 @@ def solve_trajectory(x0, pose_goal, N):
     final_rotation_error = np.linalg.norm(0.5 * vee_map(R_goal.T @ R - R.T @ R_goal))
 
     # Generate list of time steps corresponding to each x and u in the trajectory
-    dt_array = np.array([])
+    dt_array = []
     for n in range(N):
-       np.append(dt_array, compute_discrete_dynamics_time_step(n, min_cost_time_interval))
+       dt_array.append(compute_discrete_dynamics_time_step(n, min_cost_time_interval))
 
     return *min_cost_traj, min_cost_time_interval, dt_array, final_translation_error, final_rotation_error

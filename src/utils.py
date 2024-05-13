@@ -114,8 +114,7 @@ class StateConverter(LeafSystem):
         
         # Define input port for the drone state from drake
         # [x, y, z, R, P, Y, x_dot, y_dot, z_dot, R_dot, P_dot, Y_dot].T
-        self.input_port_drone_state = self.DeclareInputPort("drone_state", 
-                                                             BasicVector(12))
+        self.input_port_drone_state = self.DeclareVectorInputPort("drone_state", 12)
         
         # Define output port for drone state in SE(3) form:
         # [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
@@ -128,15 +127,13 @@ class StateConverter(LeafSystem):
         Simply convert the state representation and set the output
         """
         # Retrieve input data from input ports
-        drone_state = self.input_port_drone_state.Eval(context)
+        drone_state = self.get_input_port(0).Eval(context)
 
         R = euler_to_rotation_matrix(drone_state[3:6])
-        drone_state_se3 = np.concatenate((drone_state[:3], drone_state[6:9], R.flatten(0), drone_state[9:]))
+        drone_state_se3 = np.concatenate((drone_state[:3], drone_state[6:9], R.flatten(), drone_state[9:]))
 
         # Set output
         output.SetFromVector(drone_state_se3)
-
-
 
 class TrajectoryDesiredStateSource(LeafSystem):
     def __init__(self):
@@ -152,7 +149,6 @@ class TrajectoryDesiredStateSource(LeafSystem):
                                                                            BasicVector(18),
                                                                            self.CalcOutput)
         
-        self.dt_array = None
         self.n = 0
         self.traj_elapsed_time = 0
 
