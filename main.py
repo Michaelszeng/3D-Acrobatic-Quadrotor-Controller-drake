@@ -226,7 +226,7 @@ meshcat.SetLine("ddp traj", pos_3d_matrix)
 ################################################################################
 builder = DiagramBuilder()
 quadrotor_diagram_builder = DiagramBuilder()
-plant, scene_graph = AddMultibodyPlantSceneGraph(quadrotor_diagram_builder, time_step=0.005)
+plant, scene_graph = AddMultibodyPlantSceneGraph(quadrotor_diagram_builder, time_step=0.0)  # time step of 0 --> continuous time
 parser = Parser(plant)
 (model_instance,) = parser.AddModelsFromUrl("package://drake/examples/quadrotor/quadrotor.urdf")
 
@@ -278,11 +278,12 @@ quadrotor_diagram = quadrotor_diagram_builder.Build()
 
 builder.AddSystem(quadrotor_diagram)
 
-Q = np.diag(np.concatenate(([10] * 6, [1] * 6)))
+Q = np.diag(np.concatenate(([10] * 6, [1] * 6, [0] * 13)))
 R = np.eye(4)
 options = FiniteHorizonLinearQuadraticRegulatorOptions()
 options.Qf = Q
 break_points = np.concatenate(([0], np.cumsum(dt_array)))
+x_trj = transform_state_trajectory(x_trj)  # need to convert rotation matrices to RPY and angular velocities to RPY_dot, and also add 13 zero's to account for extra state variables
 x_trj = np.vstack((x_trj, x_trj[np.shape(x_trj)[0]-1]))  # Repeat last state at very end of trajectory
 options.x0 = PiecewisePolynomial.FirstOrderHold(break_points, x_trj.T)
 u_trj = np.vstack((u_trj, u_trj[np.shape(u_trj)[0]-1], u_trj[np.shape(u_trj)[0]-1]))  # Repeat last command 2x at very end of trajectory
@@ -298,8 +299,8 @@ controller = builder.AddSystem(
         options=options,
     )
 )
-builder.Connect(controller.get_output_port(), quadrotor_diagram.get_command_input_port())
-builder.Connect(quadrotor_diagram.GetOutputPort("state"), controller.get_input_port())
+builder.Connect(controller.get_output_port(), quadrotor_diagram.get_input_port())
+builder.Connect(quadrotor_diagram.get_output_port(), controller.get_input_port())
 
 
 # se3_controller = builder.AddSystem(SE3Controller())

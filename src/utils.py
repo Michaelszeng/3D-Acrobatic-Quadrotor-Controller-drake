@@ -10,6 +10,7 @@ import pydrake.symbolic as sym
 from typing import BinaryIO, Optional, Union, Tuple
 import pydot
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 
 # Quadrotor Constants (derived from quadrotor MultibodyPlant)
@@ -108,7 +109,7 @@ def rpy_rates_to_angular_velocity(rpy_rates, rpy_angles):
     """
     roll_rate, pitch_rate, yaw_rate = rpy_rates
     roll, pitch, yaw = rpy_angles
-    
+
     transformation_matrix = np.array([
         [1, 0, -np.sin(pitch)],
         [0, np.cos(roll), np.cos(pitch) * np.sin(roll)],
@@ -118,6 +119,50 @@ def rpy_rates_to_angular_velocity(rpy_rates, rpy_angles):
     angular_velocity = np.dot(transformation_matrix, np.array([roll_rate, pitch_rate, yaw_rate]))
     
     return angular_velocity
+
+
+def rotation_matrix_to_rpy(matrix):
+    """Convert a rotation matrix to roll, pitch, yaw angles using ZYX convention."""
+    r = R.from_matrix(matrix)
+    rpy = r.as_euler('zyx', degrees=False)
+    return rpy[::-1]  # reverse to get XYZ order instead of ZYX
+
+
+def angular_velocity_to_rpy_dot(angular_velocity, rpy):
+    """Compute the derivatives of roll, pitch, and yaw angles."""
+    phi, theta, psi = rpy
+    wx, wy, wz = angular_velocity
+    
+    rpy_dot = np.array([
+        wx + np.sin(phi)*np.tan(theta)*wy + np.cos(phi)*np.tan(theta)*wz,
+        np.cos(phi)*wy - np.sin(phi)*wz,
+        np.sin(phi)/np.cos(theta)*wy + np.cos(phi)/np.cos(theta)*wz
+    ])
+    
+    return rpy_dot
+
+
+def transform_state_trajectory(x_trj):
+    transformed_trj = []
+
+    for state in x_trj:
+        x, y, z = state[0], state[1], state[2]
+        x_dot, y_dot, z_dot = state[3], state[4], state[5]
+        rotation_matrix = state[6:15].reshape(3, 3)
+        angular_velocity = state[15:18]
+        
+        # Convert rotation matrix to roll, pitch, and yaw
+        rpy = rotation_matrix_to_rpy(rotation_matrix)
+        
+        # Compute the derivatives of roll, pitch, and yaw
+        rpy_dot = angular_velocity_to_rpy_dot(angular_velocity, rpy)
+        
+        # Form the new state representation
+        new_state = np.array([x, y, z] + list(rpy) + [x_dot, y_dot, z_dot] + list(rpy_dot) + [0]*13)
+        
+        transformed_trj.append(new_state)
+    
+    return np.array(transformed_trj)
 
 
 def soft_clamp(x, mi, mx): 
