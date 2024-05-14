@@ -93,7 +93,7 @@ class SE3Controller(LeafSystem):
         desired_state = self.get_input_port(1).Eval(context)
         print(desired_state)
 
-        # desired_state = np.array([-1.5, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0])
+        # desired_state = np.array([-1.4, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0])
 
         # if not np.any(np.isnan(self.prev_desired_state)) and not np.all(np.isclose(desired_state, self.prev_desired_state)):
         #     # New desired_state has been received
@@ -139,7 +139,7 @@ class SE3Controller(LeafSystem):
         print(f"{Rd_traj=}")
         Wd = np.array([desired_state[15], -desired_state[16], -desired_state[17]])  # negate b2 and b3 angular velocity to account for difference in body frame defn.
         eR = 0.5 * vee_map(Rd.T @ R - R.T @ Rd)
-        eW = W - R.T @ Rd @ Wd  # current angular velocity - desired angular velocity transformed into body frame
+        eW = W - R.T @ Rd @ Wd  # current angular velocity (in body frame) - desired angular velocity transformed into body frame. This is equivalent to the angular velocty of the rotation matrix Rd.T @ R (from body frame to desired body frame)
         Wd_dot = self.Wd_dot  # for convenience so I don't have to repeat `self.`
 
         f = np.dot(-A, R @ np.array([0, 0, 1]))
