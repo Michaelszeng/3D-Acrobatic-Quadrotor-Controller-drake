@@ -147,7 +147,7 @@ def trajectory_cost(pose_goal, x, u, n, N, beta=10):
     # try:
     #     print(f"energy_cost: {energy_cost:>25}    translation_error_cost: {translation_error_cost:>25}    rotation_error_cost: {rotation_error_cost:>25}")
     # except:
-    #     pass
+    #     pass 
 
     return scale * (0.005*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost)
 
