@@ -65,7 +65,7 @@ def vee_map(S):
 
 def euler_to_rotation_matrix(angles):
     """
-    Convert from Euler Angles to 3x3 Rotation Matrix using Drake Symbolic.
+    Convert from Euler Angles to 3x3 Rotation Matrix.
     
     `angles` is a (3,) np array containing [R, P, Y]
     """
@@ -95,6 +95,29 @@ def euler_to_rotation_matrix(angles):
     R = np.dot(R_yaw, np.dot(R_pitch, R_roll))
 
     return R
+
+
+def rpy_rates_to_angular_velocity(rpy_rates, rpy_angles):
+    """
+    Convert roll, pitch, yaw rates to angular velocities in body-fixed frame.
+    
+    rpy_rates: A numpy array of shape (3,) containing [roll_rate, pitch_rate, yaw_rate].
+    rpy_angles: A numpy array of shape (3,) containing [roll, pitch, yaw].
+    
+    Returns a numpy array of shape (3,) containing [omega_x, omega_y, omega_z].
+    """
+    roll_rate, pitch_rate, yaw_rate = rpy_rates
+    roll, pitch, yaw = rpy_angles
+    
+    transformation_matrix = np.array([
+        [1, 0, -np.sin(pitch)],
+        [0, np.cos(roll), np.cos(pitch) * np.sin(roll)],
+        [0, -np.sin(roll), np.cos(pitch) * np.cos(roll)]
+    ])
+    
+    angular_velocity = np.dot(transformation_matrix, np.array([roll_rate, pitch_rate, yaw_rate]))
+    
+    return angular_velocity
 
 
 def soft_clamp(x, mi, mx): 
@@ -130,7 +153,8 @@ class StateConverter(LeafSystem):
         drone_state = self.get_input_port(0).Eval(context)
 
         R = euler_to_rotation_matrix(drone_state[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
-        drone_state_se3 = np.concatenate((drone_state[:3], drone_state[6:9], R.flatten(), drone_state[11:8:-1]))  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
+        W = rpy_rates_to_angular_velocity(drone_state[11:8:-1], drone_state[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
+        drone_state_se3 = np.concatenate((drone_state[:3], drone_state[6:9], R.flatten(), W))
 
         # Set output
         output.SetFromVector(drone_state_se3)

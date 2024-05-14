@@ -336,6 +336,6 @@ simulator.set_target_realtime_rate(1.0)
 #     t += dt_array[i]
 #     simulator.AdvanceTo(t)
 
-simulator.AdvanceTo(5)
+simulator.AdvanceTo(np.sum(dt_array))
 
 meshcat.PublishRecording()

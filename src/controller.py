@@ -12,6 +12,9 @@ from src.utils import *
 """
 Quadrotor state is represented as the (18,) vector:
 [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
+
+Note: R is rotation from body-fixed frame to world frame ({}^W R^B)
+Note: W is w.r.t. body-fixed frame
 """
 class DirtyDerivative:
     def __init__(self, order, tau=0.05):
@@ -65,7 +68,7 @@ class SE3Controller(LeafSystem):
         # self.kW = 2.54
         self.kx = 16*m
         self.kv = 5.6*m
-        self.kR = 0.001
+        self.kR = 0.01
         self.kW = 0.0
 
         self.prev_desired_state = np.empty((18,))
@@ -90,7 +93,7 @@ class SE3Controller(LeafSystem):
         desired_state = self.get_input_port(1).Eval(context)
         print(desired_state)
 
-        desired_state = np.array([-1.5, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0])
+        # desired_state = np.array([-1.5, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0])
 
         # if not np.any(np.isnan(self.prev_desired_state)) and not np.all(np.isclose(desired_state, self.prev_desired_state)):
         #     # New desired_state has been received
@@ -136,7 +139,7 @@ class SE3Controller(LeafSystem):
         print(f"{Rd_traj=}")
         Wd = np.array([desired_state[15], -desired_state[16], -desired_state[17]])  # negate b2 and b3 angular velocity to account for difference in body frame defn.
         eR = 0.5 * vee_map(Rd.T @ R - R.T @ Rd)
-        eW = W - R.T @ Rd @ Wd
+        eW = W - R.T @ Rd @ Wd  # current angular velocity - desired angular velocity transformed into body frame
         Wd_dot = self.Wd_dot  # for convenience so I don't have to repeat `self.`
 
         f = np.dot(-A, R @ np.array([0, 0, 1]))
