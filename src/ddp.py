@@ -458,8 +458,7 @@ def solve_trajectory(x0, pose_goal, N, num_dt_to_search=3):
     min_cost = np.inf
     min_cost_traj = []
     min_cost_time_interval = 0
-    # for i in np.linspace(0.025, 0.1, num_dt_to_search):
-    for i in [0.1]:
+    for i in np.linspace(0.025, 0.1, num_dt_to_search):
         x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, i)
         print(f"=====================================cost (dt={i}): {cost_trace[-1]}=====================================")
         if cost_trace[-1] <= min_cost:

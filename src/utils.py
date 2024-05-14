@@ -125,7 +125,7 @@ def rotation_matrix_to_rpy(matrix):
     """Convert a rotation matrix to roll, pitch, yaw angles using ZYX convention."""
     r = R.from_matrix(matrix)
     rpy = r.as_euler('zyx', degrees=False)
-    return rpy[::-1]  # reverse to get XYZ order instead of ZYX
+    return rpy
 
 
 def angular_velocity_to_rpy_dot(angular_velocity, rpy):
