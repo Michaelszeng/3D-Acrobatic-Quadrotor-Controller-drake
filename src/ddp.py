@@ -78,7 +78,7 @@ def discrete_dynamics(x, u, n, dt_nominal):
     x_dot, R, W = continuous_dynamics(x, u)
 
     # Precise integration of rotation matrix to preserve orthogonality and det=1 using Exponential Map
-    W_norm = np.sqrt(np.dot(W, W))
+    W_norm = np.sqrt(np.dot(W, W) + eps)
     theta = W_norm * dt  # change in rotation over time step
     k = W / W_norm  # axis of rotation
     K_hat = hat_map(k)  # convert axis of rotation to skew symmetric matrix
@@ -139,7 +139,7 @@ def trajectory_cost(pose_goal, x, u, n, N, beta=10):
 
     # Error from taking norm of e_R (equation (8)) from Lee et al.
     rotation_error_vec = 0.5 * vee_map(R_goal.T @ R - R.T @ R_goal)
-    rotation_error = np.sqrt(np.dot(rotation_error_vec, rotation_error_vec))  # compute norm
+    rotation_error = np.sqrt(np.dot(rotation_error_vec, rotation_error_vec) + eps)  # compute norm
 
     # rotation_error = 0
     rotation_error_cost = np.dot(rotation_error, rotation_error)
@@ -414,10 +414,13 @@ def solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, dt, max_it
     regu_trace = [regu]
 
     # Run main loop
+    all_x_trj = []
     for i in range(max_iter):
         # Backward and forward pass
         k_trj, K_trj, expected_cost_redu = backward_pass(derivs, x_trj, u_trj, regu)
         x_trj_new, u_trj_new = forward_pass(x_trj, u_trj, k_trj, K_trj, dt)
+
+        all_x_trj.append(x_trj_new)
 
         # Evaluate new trajectory
         total_cost = cost_trj(pose_goal, x_trj_new, u_trj_new)
@@ -447,7 +450,7 @@ def solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, dt, max_it
             print("Expected cost reduction too low. Terminating early.")
             break
 
-    return x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace
+    return all_x_trj, x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace
 
 
 def solve_trajectory(x0, pose_goal, N, num_dt_to_search=3):
@@ -460,7 +463,7 @@ def solve_trajectory(x0, pose_goal, N, num_dt_to_search=3):
     min_cost_time_interval = 0
     # for i in np.linspace(0.025, 0.1, num_dt_to_search):
     for i in [0.1]:
-        x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, i)
+        all_x_trj, x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, i)
         print(f"=====================================cost (dt={i}): {cost_trace[-1]}=====================================")
         if cost_trace[-1] <= min_cost:
             print(f"step {i}: {cost_trace[-1]} <= current minimum: {min_cost}")
@@ -480,4 +483,4 @@ def solve_trajectory(x0, pose_goal, N, num_dt_to_search=3):
     for n in range(N):
        dt_array.append(compute_discrete_dynamics_time_step(n, min_cost_time_interval))
 
-    return *min_cost_traj, min_cost_time_interval, dt_array, final_translation_error, final_rotation_error
+    return all_x_trj, *min_cost_traj, min_cost_time_interval, dt_array, final_translation_error, final_rotation_error
