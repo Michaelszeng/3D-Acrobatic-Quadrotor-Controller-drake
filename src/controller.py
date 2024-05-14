@@ -121,8 +121,10 @@ class SE3Controller(LeafSystem):
         print(f"{A=}")
         b3d = -A / np.linalg.norm(A)                                          # b3d is determined by necesary heading to reach position setpoint
         b1d = desired_state[6:15].reshape(3, 3) @ np.array([1, 0, 0])        # b1d is set by the DDP trajectory
-        # print(f"{b1d=}")
         b2d = np.cross(b3d, b1d) / np.linalg.norm(np.cross(b3d, b1d))        # b2d is computed as cross product of b3d and Proj(b1d) onto the normal plane to b3d
+        print(f"{b1d=}, norm: {np.linalg.norm(b1d)}")
+        print(f"{b2d=}, norm: {np.linalg.norm(b2d)}")
+        print(f"{b3d=}, norm: {np.linalg.norm(b3d)}")
         Rd_traj = desired_state[6:15].reshape(3, 3)
         Rd = np.hstack((np.cross(b2d, b3d).reshape((3, 1)), b2d.reshape((3, 1)), b3d.reshape((3, 1))))
         print(f"{Rd=}")

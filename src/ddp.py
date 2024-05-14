@@ -78,10 +78,14 @@ def discrete_dynamics(x, u, n, dt_nominal):
     x_dot, R, W = continuous_dynamics(x, u)
 
     # Precise integration of rotation matrix to preserve orthogonality and det=1 using Exponential Map
-    theta = np.linalg.norm(W + eps)  # add eps to prevent input to np.linalg.norm from going to 0 (np.linalg.norm becomes undifferentiable)
-    W_hat = hat_map(W) * dt
+    W_norm = np.sqrt(np.dot(W, W))
+    theta = W_norm * dt  # change in rotation over time step
+    k = W / W_norm  # axis of rotation
+    K_hat = hat_map(k)  # convert axis of rotation to skew symmetric matrix
     # Rodrigues' Formula
-    R_new = R @ (np.eye(3) + np.sin(theta) * W_hat + (1 - np.cos(theta)) * np.power(W_hat, 2))
+    R_new = R @ (np.eye(3) + np.sin(theta) * K_hat + (1 - np.cos(theta)) * np.dot(K_hat, K_hat))
+
+    # print(f"{R_new=}")
 
     # Euler Integration for other components of state
     return np.concatenate((x[:6]+x_dot[:6]*dt, R_new.flatten(), x[15:]+x_dot[15:]*dt))
@@ -134,7 +138,8 @@ def trajectory_cost(pose_goal, x, u, n, N, beta=10):
     # rotation_error = np.arccos((trace_R - 1) / 2)
 
     # Error from taking norm of e_R (equation (8)) from Lee et al.
-    rotation_error = np.linalg.norm(0.5 * vee_map(R_goal.T @ R - R.T @ R_goal) + eps)  # add eps to prevent input to np.linalg.norm from going to 0 (np.linalg.norm becomes undifferentiable)
+    rotation_error_vec = 0.5 * vee_map(R_goal.T @ R - R.T @ R_goal)
+    rotation_error = np.sqrt(np.dot(rotation_error_vec, rotation_error_vec))  # compute norm
 
     # rotation_error = 0
     rotation_error_cost = np.dot(rotation_error, rotation_error)
