@@ -78,7 +78,7 @@ def discrete_dynamics(x, u, n, dt_nominal):
     x_dot, R, W = continuous_dynamics(x, u)
 
     # Precise integration of rotation matrix to preserve orthogonality and det=1 using Exponential Map
-    W_norm = np.sqrt(np.dot(W, W))
+    W_norm = np.sqrt(np.dot(W, W) + eps)
     theta = W_norm * dt  # change in rotation over time step
     k = W / W_norm  # axis of rotation
     K_hat = hat_map(k)  # convert axis of rotation to skew symmetric matrix
