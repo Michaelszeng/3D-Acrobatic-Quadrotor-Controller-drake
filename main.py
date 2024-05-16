@@ -286,6 +286,7 @@ options.Qf = Q
 break_points = np.concatenate(([0], np.cumsum(dt_array)))
 x_trj = transform_state_trajectory(x_trj)  # need to convert rotation matrices to RPY and angular velocities to RPY_dot, and also add 13 zero's to account for extra state variables
 x_trj = np.vstack((x_trj, x_trj[np.shape(x_trj)[0]-1]))  # Repeat last state at very end of trajectory
+print(f"{x_trj=}")
 options.x0 = PiecewisePolynomial.FirstOrderHold(break_points, x_trj.T)
 u_trj = np.vstack((u_trj, u_trj[np.shape(u_trj)[0]-1], u_trj[np.shape(u_trj)[0]-1]))  # Repeat last command 2x at very end of trajectory
 options.u0 = PiecewisePolynomial.FirstOrderHold(break_points, u_trj.T)

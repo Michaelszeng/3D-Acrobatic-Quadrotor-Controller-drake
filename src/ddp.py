@@ -120,8 +120,8 @@ def trajectory_cost(pose_goal, x, u, n, N, beta=10):
     """
     scale = np.exp((beta * (n - N)) / N)  # Exponential scaling factor
 
-    # energy_cost = np.dot(u, u)
-    energy_cost = 0
+    energy_cost = np.dot(u, u)
+    # energy_cost = 0
 
     translation_error_cost = np.dot(x[:3] - pose_goal[:3], x[:3] - pose_goal[:3])
 
@@ -149,7 +149,7 @@ def trajectory_cost(pose_goal, x, u, n, N, beta=10):
     # except:
     #     pass
 
-    return scale * (0.005*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost)
+    return scale * (0.001*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost)
 
 
 def terminal_cost(pose_goal, x, N):
@@ -458,7 +458,8 @@ def solve_trajectory(x0, pose_goal, N, num_dt_to_search=3):
     min_cost = np.inf
     min_cost_traj = []
     min_cost_time_interval = 0
-    for i in np.linspace(0.025, 0.1, num_dt_to_search):
+    # for i in np.linspace(0.025, 0.1, num_dt_to_search):
+    for i in [0.1]:
         x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace = solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, i)
         print(f"=====================================cost (dt={i}): {cost_trace[-1]}=====================================")
         if cost_trace[-1] <= min_cost:
