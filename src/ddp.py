@@ -481,3 +481,16 @@ def solve_trajectory(x0, pose_goal, N, num_dt_to_search=3):
        dt_array.append(compute_discrete_dynamics_time_step(n, min_cost_time_interval))
 
     return *min_cost_traj, min_cost_time_interval, dt_array, final_translation_error, final_rotation_error
+
+
+def make_basic_test_traj(x0, N, dt=0.1):
+    u_trj = np.ones((N - 1, n_u)) * (-m * g / 4)
+    u_trj[:, 1] += 0.1  # make prop 3 spin faster to propel quadrotor forward
+    x_trj = dynamics_rollout(x0, u_trj, dt)
+
+    # Generate list of time steps corresponding to each x and u in the trajectory
+    dt_array = []
+    for n in range(N):
+       dt_array.append(compute_discrete_dynamics_time_step(n, dt))
+
+    return x_trj, u_trj
