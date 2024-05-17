@@ -88,6 +88,7 @@ class SE3Controller(LeafSystem):
             output: The output port to which the computed controller output is set.
         """
         # Retrieve input data from input ports
+        # BOTH ARE IN DRAKE'S COORDINATE FRAME
         drone_state = self.get_input_port(0).Eval(context)
         print(drone_state)
         desired_state = self.get_input_port(1).Eval(context)
@@ -108,15 +109,17 @@ class SE3Controller(LeafSystem):
         #     print(f"{self.xd_ddot=}")
         #     print(f"{self.Wd_dot=}")
 
-        # Drone current state
-        x = drone_state[:3]
-        v = drone_state[3:6]
-        R = drone_state[6:15].reshape(3, 3) @ np.array([[1,0,0],[0,-1,0],[0,0,-1]])  # rotate by 180 deg in x-axis to account for difference in body frame defn.
-        W = np.array([drone_state[15], -drone_state[16], -drone_state[17]])  # negate b2 and b3 angular velocity to account for difference in body frame defn.
+        # Drone current state, in Lee et al. body-frame
+        # NOTE: WE NEGATE ALL QUANTITIES IN Y AND Z AXES BECAUSE OF DIFFERENT BODY-FRAME DEFN.
+        x = np.array([drone_state[0], -drone_state[1], -drone_state[2]])
+        v = np.array([drone_state[3], -drone_state[4], -drone_state[5]])
+        R = np.array([[1,0,0],[0,-1,0],[0,0,-1]]) @ drone_state[6:15].reshape(3, 3)  # rotate by 180 deg in x-axis to account for difference in body frame defn.
+        W = np.array([drone_state[15], -drone_state[16], -drone_state[17]])
 
-        # Position/velocity/accelertion desired and error
-        xd = desired_state[:3]
-        vd = desired_state[3:6]
+        # Position/velocity/acceleration desired and error, in Lee et al. body-frame
+        # NOTE: WE NEGATE ALL QUANTITIES IN Y AND Z AXES BECAUSE OF DIFFERENT BODY-FRAME DEFN.
+        xd = np.array([desired_state[0], -desired_state[1], -desired_state[2]])
+        vd = np.array([desired_state[3], -desired_state[4], -desired_state[5]])
         ex = x - xd
         ev = v - vd
         print(f"{ex=}")
@@ -143,7 +146,8 @@ class SE3Controller(LeafSystem):
         Wd_dot = self.Wd_dot  # for convenience so I don't have to repeat `self.`
 
         f = np.dot(-A, R @ np.array([0, 0, 1]))
-        M = -self.kR*eR - self.kW*eW + np.cross(W, I @ W) - I @ (hat_map(W) @ R.T @ Rd @ Wd - R.T @ Rd @ Wd_dot)
+        M = -self.kR*eR - self.kW*eW
+        # M = -self.kR*eR - self.kW*eW + np.cross(W, I @ W) - I @ (hat_map(W) @ R.T @ Rd @ Wd - R.T @ Rd @ Wd_dot)
 
         # These values match the body frame defn. in Lee et al.
         net_force_moments_matrix = np.array([[1, 1, 1, 1],
