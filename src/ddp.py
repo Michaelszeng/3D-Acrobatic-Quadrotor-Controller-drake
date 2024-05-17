@@ -490,7 +490,7 @@ def make_basic_test_traj(x0, N, dt=0.1):
     x0 = np.concatenate((x0[:3], x0[6:9], R0.flatten(), W0))
     
     u_trj = np.ones((N - 1, n_u)) * (-m * g / 4)
-    u_trj[:, 1] += 0.1  # make prop 3 spin faster to propel quadrotor forward
+    u_trj[:, 2] += 0.1  # make prop 3 spin faster to propel quadrotor forward
     x_trj = dynamics_rollout(x0, u_trj, dt)
 
     # Generate list of time steps corresponding to each x and u in the trajectory
