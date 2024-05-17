@@ -68,7 +68,7 @@ class SE3Controller(LeafSystem):
         # self.kW = 2.54
         self.kx = 16*m
         self.kv = 5.6*m
-        self.kR = 0.001
+        self.kR = 0.005
         self.kW = 0.0
 
         self.prev_desired_state = np.empty((18,))

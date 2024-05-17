@@ -481,3 +481,21 @@ def solve_trajectory(x0, pose_goal, N, num_dt_to_search=3):
        dt_array.append(compute_discrete_dynamics_time_step(n, min_cost_time_interval))
 
     return *min_cost_traj, min_cost_time_interval, dt_array, final_translation_error, final_rotation_error
+
+
+def make_basic_test_traj(x0, N, dt=0.1):
+    # First, convert Drake initial state representation to SE(3) form [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
+    R0 = euler_to_rotation_matrix(x0[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
+    W0 = rpy_rates_to_angular_velocity(x0[11:8:-1], x0[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
+    x0 = np.concatenate((x0[:3], x0[6:9], R0.flatten(), W0))
+    
+    u_trj = np.ones((N - 1, n_u)) * (-m * g / 4)
+    u_trj[:, 2] += 0.025  # make prop 3 spin faster to propel quadrotor forward
+    x_trj = dynamics_rollout(x0, u_trj, dt)
+
+    # Generate list of time steps corresponding to each x and u in the trajectory
+    dt_array = []
+    for n in range(N):
+       dt_array.append(compute_discrete_dynamics_time_step(n, dt))
+
+    return x_trj, u_trj, dt_array
