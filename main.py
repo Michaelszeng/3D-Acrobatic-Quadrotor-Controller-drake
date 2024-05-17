@@ -30,7 +30,7 @@ import argparse
 import yaml
 
 from src.utils import *
-from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps_fixed_interval
+from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps_fixed_interval, make_basic_test_traj
 # from src.se3_leaf import SE3Controller
 # from src.controller import SE3Controller
 from src.controllerv2 import SE3Controller
@@ -57,17 +57,20 @@ pose_goal = np.array([0, 0, 0, 0.0, 0.0, 1.57])
 ################################################################################
 # Solve for trajectory
 N=20  # Number of time steps in trajectory
-x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error = solve_trajectory(np.array([x0, y0, z0, rz0, ry0, rx0, 0, 0, 0, 0, 0, 0]), pose_goal, N)
+# x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error = solve_trajectory(np.array([x0, y0, z0, rz0, ry0, rx0, 0, 0, 0, 0, 0, 0]), pose_goal, N)
 
-print(f"{dt=}\n")
-print(f"{dt_array=}\n")
-print(f"{x_trj=}\n")
-print(f"{u_trj=}\n")
-print(f"{cost_trace=}\n")
-print(f"{regu_trace=}\n")
-print(f"{redu_ratio_trace=}\n")
-print(f"{redu_trace=}\n")
-print(f"final_translation_error: {final_translation_error:>25}    final_rotation_error: {final_rotation_error:>25}")
+# print(f"{dt=}\n")
+# print(f"{dt_array=}\n")
+# print(f"{x_trj=}\n")
+# print(f"{u_trj=}\n")
+# print(f"{cost_trace=}\n")
+# print(f"{regu_trace=}\n")
+# print(f"{redu_ratio_trace=}\n")
+# print(f"{redu_trace=}\n")
+# print(f"final_translation_error: {final_translation_error:>25}    final_rotation_error: {final_rotation_error:>25}")
+
+
+x_trj, u_trj, dt_array = make_basic_test_traj(np.array([x0, y0, z0, rz0, ry0, rx0, 0, 0, 0, 0, 0, 0]), N)
 
 
 # x_trj = np.array([[-1.50000000e+00,  0.00000000e+00,  1.00000000e+00,
