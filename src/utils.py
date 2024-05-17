@@ -158,7 +158,8 @@ def transform_state_trajectory(x_trj):
         rpy_dot = angular_velocity_to_rpy_dot(angular_velocity, rpy)
         
         # Form the new state representation
-        new_state = np.array([x, y, z] + list(rpy) + [x_dot, y_dot, z_dot] + list(rpy_dot) + [0]*13)
+        new_state = np.array([x, y, z] + list(rpy) + [x_dot, y_dot, z_dot] + list(rpy_dot) + [0,0,0,0,0,0,0,0,0,0,0,0,0])
+        #                                                                                     X X X X X X X 1 1 1 X X X
         
         transformed_trj.append(new_state)
     
