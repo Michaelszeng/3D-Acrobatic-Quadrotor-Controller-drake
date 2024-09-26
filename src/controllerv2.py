@@ -1,4 +1,3 @@
-""" Miscellaneous Utility functions """
 from pydrake.all import (
     LeafSystem,
     BasicVector,
@@ -124,12 +123,6 @@ class SE3Controller(LeafSystem):
         self.g = 9.81
         self.J = I
         self.e3 = np.array([0.,0.,1.])
-        # self.kR = 8.81 # attitude gains
-        # self.kW = 2.54 # attitude gains
-        self.kR = 0 # attitude gains
-        self.kW = 0 # attitude gains
-        self.kx = 16.*self.m # position gains
-        self.kv = 5.6*self.m # position gains
         self.xd = None
         self.xd_dot = None
         self.command = None

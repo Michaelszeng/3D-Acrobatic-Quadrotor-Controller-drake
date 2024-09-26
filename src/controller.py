@@ -69,7 +69,7 @@ class SE3Controller(LeafSystem):
         self.kx = 16*m
         self.kv = 5.6*m
         self.kR = 0.005
-        self.kW = 0.001
+        self.kW = 0.0
 
         self.prev_desired_state = np.empty((18,))
         self.prev_desired_state.fill(np.nan)
@@ -109,25 +109,24 @@ class SE3Controller(LeafSystem):
         #     print(f"{self.xd_ddot=}")
         #     print(f"{self.Wd_dot=}")
 
-        WLee_R_Wdrake = Bdrake_R_BLee = np.array([[1,0,0],[0,-1,0],[0,0,-1]])  # 180 deg rotation about x
+        WLee_R_Wdrake = Bdrake_R_BLee = BLee_R_Bdrake = np.array([[1,0,0],[0,-1,0],[0,0,-1]])  # 180 deg rotation about x
 
-        # Drone current state, in Lee et al. inertial-frame
-        x = WLee_R_Wdrake @ drone_state[:3]
-        v = WLee_R_Wdrake @ drone_state[3:6]
+        x = WLee_R_Wdrake @ drone_state[:3]                     # position in Lee et al. inertial frame
+        v = WLee_R_Wdrake @ drone_state[3:6]                    # velocity in Lee et al. inertial frame
         Wdrake_R_Bdrake = drone_state[6:15].reshape(3, 3)
         # WLee_R_BLee
-        R = WLee_R_Wdrake @ Wdrake_R_Bdrake @  Bdrake_R_BLee
-        W = WLee_R_Wdrake @ drone_state[15:]
+        R = WLee_R_Wdrake @ Wdrake_R_Bdrake @  Bdrake_R_BLee    # rotation from Lee et al. body frame to inertial frame
+        W = BLee_R_Bdrake @ drone_state[15:]                    # angular velocity in Lee at al. body-fixed frame
         print(f" {W=}")
 
-        # Position/velocity/acceleration desired and error, in Lee et al. inertial-frame
-        # NOTE: WE NEGATE ALL QUANTITIES IN Y AND Z AXES BECAUSE OF DIFFERENT BODY-FRAME DEFN.
-        xd = WLee_R_Wdrake @ desired_state[:3]
-        vd = WLee_R_Wdrake @ desired_state[3:6]
-        Wdrake_Rd_Bdrake = Wdrake_R_Bdrake
-        Rd_traj = WLee_R_Wdrake @ Wdrake_Rd_Bdrake @  Bdrake_R_BLee
-        ex = x - xd
-        ev = v - vd
+        # Position/velocity/acceleration desired and error, in Lee et al. inertial frame
+        xd = WLee_R_Wdrake @ desired_state[:3]                      # desired position in Lee et al. inertial frame
+        vd = WLee_R_Wdrake @ desired_state[3:6]                     # desired velocity in Lee et al. inertial frame
+        Wdrake_Rd_Bdrake = desired_state[6:15].reshape(3, 3)   
+        Rd_traj = WLee_R_Wdrake @ Wdrake_Rd_Bdrake @  Bdrake_R_BLee # desired rotation from Lee et al. body frame to inertial frame
+
+        ex = x - xd     # position error in Lee et al. inertial frame
+        ev = v - vd     # velocity error in Lee et al. inertial frame
         print(f"{ex=}")
         print(f"{ev=}")
         xd_ddot = self.xd_ddot  # for convenience so I don't have to repeat `self.`
@@ -145,7 +144,7 @@ class SE3Controller(LeafSystem):
         Rd = np.hstack((np.cross(b2d, b3d).reshape((3, 1)), b2d.reshape((3, 1)), b3d.reshape((3, 1))))
         print(f"{Rd=}")
         print(f"{Rd_traj=}")
-        Wd = np.array([desired_state[15], -desired_state[16], -desired_state[17]])  # negate b2 and b3 angular velocity to account for difference in body frame defn.
+        Wd = BLee_R_Bdrake @ desired_state[15:]
         eR = 0.5 * vee_map(Rd.T @ R - R.T @ Rd)
         eW = W - R.T @ Rd @ Wd  # current angular velocity (in body frame) - desired angular velocity transformed into body frame. This is equivalent to the angular velocty of the rotation matrix Rd.T @ R (from body frame to desired body frame)
         print(f"{eR=}")

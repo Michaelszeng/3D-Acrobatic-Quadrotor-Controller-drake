@@ -15,9 +15,8 @@ from pydrake.all import (
     Simulator,
     StartMeshcat,
     namedview,
-    JointSliders
+    JointSliders,
 )
-from underactuated.scenarios import AddFloatingRpyJoint
 
 import numpy as np
 import os
@@ -27,8 +26,7 @@ import yaml
 
 from src.utils import *
 from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps_fixed_interval, make_basic_test_traj
-# from src.se3_leaf import SE3Controller
-from src.controller import SE3Controller
+from src.controllerv3 import SE3Controller
 
 meshcat = StartMeshcat()
 
@@ -37,12 +35,12 @@ meshcat = StartMeshcat()
 ##### User-Defined Constants
 ################################################################################
 # Set initial pose of quadrotor
-x0 = -1.5
+x0 = -1
 y0 = 0
 z0 = 1
-rx0 = 0.0
-ry0 = 0.0
-rz0 = 0.0
+roll0 = 0
+pitch0 = 0
+yaw0 = 0
 
 pose_goal = np.array([0, 0, 3, 3.14, 0, 0])
 
@@ -51,18 +49,9 @@ pose_goal = np.array([0, 0, 3, 3.14, 0, 0])
 ##### Diagram Setup
 ################################################################################
 builder = DiagramBuilder()
-plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.005)
+plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.00001)
 parser = Parser(plant)
 (model_instance,) = parser.AddModelsFromUrl("package://drake/examples/quadrotor/quadrotor.urdf")
-
-# Set up the floating base type for the quadrotor.
-# NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
-AddFloatingRpyJoint(
-    plant,
-    plant.GetFrameByName("base_link"),
-    model_instance,
-    use_ball_rpy=False
-)
 
 # Add visual quadrotor to show the desired pose of the main quadrotor
 (visual_quadrotor_model_instance,) = parser.AddModelsFromUrl(f"file://{os.path.abspath('visual_quadrotor.urdf')}")
@@ -72,19 +61,20 @@ plant.Finalize()
 
 # Set up the propellers to generate spatial force on quadrotor
 body_index = plant.GetBodyByName("base_link").index()
-kF = 1.0  # Force input constant
-# Propellors 1 and 3 rotate CW, 2 and 4 rotate CCW
-# prop_info = [
-#     PropellerInfo(body_index, RigidTransform([L/np.sqrt(2), L/np.sqrt(2), 0]), kF, -kM),
-#     PropellerInfo(body_index, RigidTransform([-L/np.sqrt(2), L/np.sqrt(2), 0]), kF, kM),
-#     PropellerInfo(body_index, RigidTransform([-L/np.sqrt(2), -L/np.sqrt(2), 0]), kF, -kM),
-#     PropellerInfo(body_index, RigidTransform([L/np.sqrt(2), -L/np.sqrt(2), 0]), kF, kM),
-# ]
+
+"""
+Quadrotor model:
+ - Right-handed coordinate frames
+ - b1 axis points between rotors 1 and 4
+ - b2 axis points between rotors 1 and 2
+ - b3 axis points vertically upwards 
+ - Rotors 2 and 4 spin CW, Rotors 1 and 3 spin CCW to generate positive (in b3 axis) force, and therefore negative moment
+"""
 prop_info = [
-    PropellerInfo(body_index, RigidTransform([L, 0, 0]), kF, kM),
-    PropellerInfo(body_index, RigidTransform([0, L, 0]), kF, -kM),
-    PropellerInfo(body_index, RigidTransform([-L, 0, 0]), kF, kM),
-    PropellerInfo(body_index, RigidTransform([0, -L, 0]), kF, -kM),
+    PropellerInfo(body_index, RigidTransform([L / np.sqrt(2), L / np.sqrt(2), 0]), kF, kM),
+    PropellerInfo(body_index, RigidTransform([-L / np.sqrt(2), L / np.sqrt(2), 0]), kF, -kM),
+    PropellerInfo(body_index, RigidTransform([-L / np.sqrt(2), -L / np.sqrt(2), 0]), kF, kM),
+    PropellerInfo(body_index, RigidTransform([L / np.sqrt(2), -L / np.sqrt(2), 0]), kF, -kM),
 ]
 propellers = builder.AddSystem(Propeller(prop_info))
 builder.Connect(
@@ -109,13 +99,16 @@ builder.Connect(
 )
 builder.Connect(
     desired_state_source.GetOutputPort("trajectory_desired_state"),
-    se3_controller.GetInputPort("x_trajectory")
+    se3_controller.GetInputPort("desired_state")
+)
+builder.Connect(
+    desired_state_source.GetOutputPort("trajectory_desired_acceleration"),
+    se3_controller.GetInputPort("desired_acceleration")
 )
 builder.Connect(
     se3_controller.GetOutputPort("controller_output"),
     propellers.get_command_input_port()
 )
-
 
 ### TEMPORARY: CONSTANT CONTROL INPUT = mg ###
 # g = plant.gravity_field().gravity_vector()[2]
@@ -146,13 +139,7 @@ visual_quadrotor_joint = plant.get_joint(visual_quadrotor_joint_idx)  # Joint ob
 visual_quadrotor_joint.Lock(plant_context)
 
 # Set initial state
-# plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("base_link"), RigidTransform([0, 0, 1]))
-plant.GetJointByName("x").set_translation(plant_context, x0)
-plant.GetJointByName("y").set_translation(plant_context, y0)
-plant.GetJointByName("z").set_translation(plant_context, z0)
-plant.GetJointByName("rx").set_angle(plant_context, rx0)  # Roll
-plant.GetJointByName("ry").set_angle(plant_context, ry0)  # Pitch
-plant.GetJointByName("rz").set_angle(plant_context, rz0)  # Yaw
+plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("base_link"), RigidTransform(RollPitchYaw(roll0, pitch0, yaw0), [x0, y0, z0]))
 
 ################################################################################
 ##### Run Trajectory Optimization
@@ -172,7 +159,7 @@ N=20  # Number of time steps in trajectory
 # print(f"final_translation_error: {final_translation_error:>25}    final_rotation_error: {final_rotation_error:>25}")
 
 
-x_trj, u_trj, dt_array = make_basic_test_traj(np.array([x0, y0, z0, rz0, ry0, rx0, 0, 0, 0, 0, 0, 0]), N)
+# x_trj, u_trj, dt_array = make_basic_test_traj(np.array([x0, y0, z0, rz0, ry0, rx0, 0, 0, 0, 0, 0, 0]), N)
 
 
 # x_trj = np.array([[-1.50000000e+00,  0.00000000e+00,  1.00000000e+00,
@@ -317,7 +304,8 @@ x_trj, u_trj, dt_array = make_basic_test_traj(np.array([x0, y0, z0, rz0, ry0, rx
 # dt_array = np.array([0.020000000000000004, 0.042857142857142864, 0.05555555555555556, 0.06363636363636364, 0.06923076923076923, 0.07333333333333333, 0.07647058823529412, 0.07894736842105264, 0.08095238095238096, 0.08260869565217392, 0.084, 0.0851851851851852, 0.08620689655172414, 0.08709677419354839, 0.08787878787878789, 0.08857142857142858, 0.0891891891891892, 0.08974358974358974, 0.0902439024390244, 0.09069767441860466])
 
 
-
+dt_array = np.array([0.1])
+x_trj = np.array([[0,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0]])
 
 # Visualize Trajectory
 pos_3d_matrix = x_trj[:,:3].T
@@ -330,7 +318,6 @@ desired_state_source.GetInputPort("trajectory").FixValue(desired_state_source_co
 # Run the simulation
 t = 0
 meshcat.StartRecording()
-simulator.set_target_realtime_rate(1.0)
 
 # # Testing DDP with open-loop control
 # for i in range(np.shape(u_trj)[0]):
@@ -338,6 +325,8 @@ simulator.set_target_realtime_rate(1.0)
 #     t += dt_array[i]
 #     simulator.AdvanceTo(t)
 
-simulator.AdvanceTo(np.sum(dt_array))
+# simulator.AdvanceTo(np.sum(dt_array))
+
+simulator.AdvanceTo(3)
 
 meshcat.PublishRecording()

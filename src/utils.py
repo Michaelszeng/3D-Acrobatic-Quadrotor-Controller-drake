@@ -10,21 +10,31 @@ import pydrake.symbolic as sym
 from typing import BinaryIO, Optional, Union, Tuple
 import pydot
 import numpy as np
+from scipy.spatial.transform import Rotation
 
 
 # Quadrotor Constants (derived from quadrotor MultibodyPlant)
 m = 0.775       # quadrotor mass
 L = 0.15        # distance from the center of mass to the center of each rotor in the b1, b2 plane
-kM = 0.0245     # relates moment applied to quadrotor to the thurst generated
-g = -9.81       # gravity
-I = np.array([[1.50000000e-03, 0.00000000e+00, 2.02795951e-16],
+kM = 1e-5       # relates moment applied to quadrotor to the thurst generated
+kF = 1e-3       # Force input constant
+g = 9.81        # gravity
+J = np.array([[1.50000000e-03, 0.00000000e+00, 2.02795951e-16],
               [0.00000000e+00, 2.50000000e-03, 0.00000000e+00],
               [2.02795951e-16, 0.00000000e+00, 3.50000000e-03]])  # Rotational Inertia
+
+a = kF * L / np.sqrt(2)
+F2W = net_force_moments_matrix = np.array([[kF, kF, kF, kF],
+                                           [a, a, -a, -a],
+                                           [-a, a, a, -a],
+                                           [kM, -kM, kM, -kM]])
 
 n_u = 4         # number of control inputs
 n_x = 18        # number of state variables
 
 eps = 1e-6      # help prevent divide by zero
+
+e3 = np.array([0.,0.,1.])
 
 
 def diagram_visualize_connections(diagram: Diagram, file: Union[BinaryIO, str]) -> None:
@@ -40,17 +50,17 @@ def diagram_visualize_connections(diagram: Diagram, file: Union[BinaryIO, str]) 
 
 
 def hat_map(v):
-        """
-        Convenience function to perform the hat map operation.The hat map of 
-        $x$, $\hat{x}$, is simply a convenience linear operator that expresses 
-        the 3D vector $x$ as a "skew-symmetric" 3x3 matrix. This 3x3 matrix can 
-        be used to apply angular velocities to a rotation matrix, or to perform 
-        cross products using just matrix multiplicaton (i.e. $\hat{x}y = x 
-        \times y$)
-        """
-        return np.array([[0, -v[2], v[1]],
-                         [v[2], 0, -v[0]],
-                         [-v[1], v[0], 0]])
+    """
+    Convenience function to perform the hat map operation.The hat map of 
+    $x$, $\hat{x}$, is simply a convenience linear operator that expresses 
+    the 3D vector $x$ as a "skew-symmetric" 3x3 matrix. This 3x3 matrix can 
+    be used to apply angular velocities to a rotation matrix, or to perform 
+    cross products using just matrix multiplicaton (i.e. $\hat{x}y = x 
+    \times y$)
+    """
+    return np.array([[0, -v[2], v[1]],
+                        [v[2], 0, -v[0]],
+                        [-v[1], v[0], 0]])
 
 
 def vee_map(S):
@@ -136,8 +146,8 @@ class StateConverter(LeafSystem):
         LeafSystem.__init__(self)
         
         # Define input port for the drone state from drake
-        # [x, y, z, R, P, Y, x_dot, y_dot, z_dot, R_dot, P_dot, Y_dot].T
-        self.input_port_drone_state = self.DeclareVectorInputPort("drone_state", 12)
+        # [qw, qx, qy, qz, x, y, z, w1, w2, w3, x_dot, y_dot, z_dot].T
+        self.input_port_drone_state = self.DeclareVectorInputPort("drone_state", 13)
         
         # Define output port for drone state in SE(3) form:
         # [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
@@ -149,14 +159,22 @@ class StateConverter(LeafSystem):
         """
         Simply convert the state representation and set the output
         """
-        # Retrieve input data from input ports
         drone_state = self.get_input_port(0).Eval(context)
 
-        R = euler_to_rotation_matrix(drone_state[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
-        W = rpy_rates_to_angular_velocity(drone_state[11:8:-1], drone_state[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
-        drone_state_se3 = np.concatenate((drone_state[:3], drone_state[6:9], R.flatten(), W))
+        # print(f"{drone_state=}")
 
-        # Set output
+        x = drone_state[4:7]
+        v = drone_state[10:13]
+        W = drone_state[7:10]
+
+        qw = drone_state[0]
+        qx = drone_state[1]
+        qy = drone_state[2]
+        qz = drone_state[3]
+        R = Rotation.from_quat([qx, qy, qz, qw]).as_matrix()
+
+        drone_state_se3 = np.concatenate((x, v, R.flatten(), W))
+
         output.SetFromVector(drone_state_se3)
 
 class TrajectoryDesiredStateSource(LeafSystem):
@@ -165,13 +183,18 @@ class TrajectoryDesiredStateSource(LeafSystem):
 
         # Input port for x_traj, computed by ddp
         traj = AbstractValue.Make(np.array([]))
-        self.DeclareAbstractInputPort("trajectory", traj)
+        self.input_port_traj = self.DeclareAbstractInputPort("trajectory", traj)
         
         # Define output port for desired drone state in SE(3) form:
         # [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
         self.output_port_drone_state_se3 = self.DeclareVectorOutputPort("trajectory_desired_state",
-                                                                           BasicVector(18),
-                                                                           self.CalcOutput)
+                                                                        BasicVector(18),
+                                                                        self.CalcDesiredState)
+        
+        # Define output port for desired drone acceleration
+        self.output_port_drone_acceleration = self.DeclareVectorOutputPort("trajectory_desired_acceleration",
+                                                                            BasicVector(3),
+                                                                            self.CalcDesiredAccel)
         
         self.n = 0
         self.traj_elapsed_time = 0
@@ -182,11 +205,11 @@ class TrajectoryDesiredStateSource(LeafSystem):
         self.N = np.shape(dt_array)[0]
         
 
-    def CalcOutput(self, context, output):
+    def CalcDesiredState(self, context, output):
         """
         Simply convert the state representation and set the output
         """
-        traj = self.get_input_port(0).Eval(context)
+        traj = self.input_port_traj.Eval(context)
 
         t = context.get_time()
 
@@ -195,8 +218,12 @@ class TrajectoryDesiredStateSource(LeafSystem):
         if t > self.traj_elapsed_time + self.dt_array[self.n]:
             self.traj_elapsed_time += self.dt_array[self.n]
             self.n = min(self.n+1, self.N-1)  # prevent out of bounds error
-            print(f"==========OUTPUTTING NEW DESIRED STATE: {traj[self.n]}==========")
+            # print(f"==========OUTPUTTING NEW DESIRED STATE: {traj[self.n]}==========")
 
         desired_state = traj[self.n]
         np.set_printoptions(precision=3)
         output.SetFromVector(desired_state)
+
+    def CalcDesiredAccel(self, context, output):
+        desired_accel = np.array([0, 0, 0])
+        output.SetFromVector(desired_accel)
