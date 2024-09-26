@@ -8,6 +8,7 @@ from pydrake.all import (
     PropellerInfo,
     RollPitchYaw,
     RigidTransform,
+    RotationMatrix,
     RobotDiagramBuilder,
     ConstantVectorSource,
     SceneGraph,
@@ -17,16 +18,17 @@ from pydrake.all import (
     namedview,
     JointSliders,
 )
+from manipulation.scenarios import AddMultibodyTriad
+from manipulation.meshcat_utils import AddMeshcatTriad
 
 import numpy as np
 import os
 import time
 import argparse
-import yaml
 
 from src.utils import *
 from src.ddp import solve_trajectory, solve_trajectory_fixed_timesteps_fixed_interval, make_basic_test_traj
-from src.controllerv3 import SE3Controller
+from src.controllerv3 import Controller
 
 meshcat = StartMeshcat()
 
@@ -42,7 +44,7 @@ roll0 = 0
 pitch0 = 0
 yaw0 = 0
 
-pose_goal = np.array([0, 0, 3, 3.14, 0, 0])
+pose_goal = np.array([1, 0, 1.5, 0.1, 0, 0])
 
 
 ################################################################################
@@ -54,13 +56,15 @@ parser = Parser(plant)
 (model_instance,) = parser.AddModelsFromUrl("package://drake/examples/quadrotor/quadrotor.urdf")
 
 # Add visual quadrotor to show the desired pose of the main quadrotor
-(visual_quadrotor_model_instance,) = parser.AddModelsFromUrl(f"file://{os.path.abspath('visual_quadrotor.urdf')}")
+(visual_quadrotor_model_instance,) = parser.AddModelsFromUrl(f"file://{os.path.abspath('assets/visual_quadrotor.urdf')}")
 visual_quadrotor_pose = RigidTransform(RollPitchYaw(pose_goal[3:]), pose_goal[:3])
 
 plant.Finalize()
 
 # Set up the propellers to generate spatial force on quadrotor
 body_index = plant.GetBodyByName("base_link").index()
+
+AddMultibodyTriad(plant.GetFrameByName("base_link"), scene_graph)
 
 """
 Quadrotor model:
@@ -86,7 +90,7 @@ builder.Connect(
     propellers.get_body_poses_input_port()
 )
 
-se3_controller = builder.AddSystem(SE3Controller())
+controller = builder.AddSystem(Controller(meshcat))
 state_converter = builder.AddSystem(StateConverter())
 desired_state_source = builder.AddSystem(TrajectoryDesiredStateSource())
 builder.Connect(
@@ -95,22 +99,22 @@ builder.Connect(
 )
 builder.Connect(
     state_converter.GetOutputPort("drone_state_se3"),
-    se3_controller.GetInputPort("drone_state")
+    controller.GetInputPort("drone_state")
 )
 builder.Connect(
     desired_state_source.GetOutputPort("trajectory_desired_state"),
-    se3_controller.GetInputPort("desired_state")
+    controller.GetInputPort("desired_state")
 )
 builder.Connect(
     desired_state_source.GetOutputPort("trajectory_desired_acceleration"),
-    se3_controller.GetInputPort("desired_acceleration")
+    controller.GetInputPort("desired_acceleration")
 )
 builder.Connect(
     desired_state_source.GetOutputPort("trajectory_desired_angular_acceleration"),
-    se3_controller.GetInputPort("desired_angular_acceleration")
+    controller.GetInputPort("desired_angular_acceleration")
 )
 builder.Connect(
-    se3_controller.GetOutputPort("controller_output"),
+    controller.GetOutputPort("controller_output"),
     propellers.get_command_input_port()
 )
 
@@ -150,7 +154,7 @@ plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("base_link"), RigidTran
 ################################################################################
 # Solve for trajectory
 N=20  # Number of time steps in trajectory
-# x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
+x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
 
 # print(f"{dt=}\n")
 # print(f"{dt_array=}\n")
@@ -162,9 +166,7 @@ N=20  # Number of time steps in trajectory
 # print(f"{redu_trace=}\n")
 # print(f"final_translation_error: {final_translation_error:>25}    final_rotation_error: {final_rotation_error:>25}")
 
-
-x_trj, u_trj, dt_array = make_basic_test_traj(np.array([x0, y0, z0, roll0, pitch0, yaw0, 0, 0, 0, 0, 0, 0]), N)
-
+# x_trj, u_trj, dt_array = make_basic_test_traj(plant.get_state_output_port().Eval(plant_context), N)
 
 # x_trj = np.array([[-1.50000000e+00,  0.00000000e+00,  1.00000000e+00,
 #          7.07388269e-01,  0.00000000e+00,  0.00000000e+00,
@@ -312,9 +314,12 @@ x_trj, u_trj, dt_array = make_basic_test_traj(np.array([x0, y0, z0, roll0, pitch
 pos_3d_matrix = x_trj[:,:3].T
 meshcat.SetLine("ddp traj", pos_3d_matrix)
 
+AddMeshcatTriad(meshcat, f"Triads/Start_Pose", X_PT=RigidTransform(RotationMatrix(x_trj[0,6:15].reshape((3,3))), x_trj[0,:3]), opacity=0.5)
+AddMeshcatTriad(meshcat, f"Triads/Goal_Pose", X_PT=RigidTransform(RotationMatrix(x_trj[-1,6:15].reshape((3,3))), x_trj[-1,:3]), opacity=0.5)
+
+# Pass trajectory to TrajectoryDesiredStateSource
 desired_state_source.set_time_intervals(dt_array)
 desired_state_source.GetInputPort("trajectory").FixValue(desired_state_source_context, x_trj)
-
 
 # Run the simulation
 t = 0
@@ -326,6 +331,6 @@ meshcat.StartRecording()
 #     t += dt_array[i]
 #     simulator.AdvanceTo(t)
 
-# simulator.AdvanceTo(np.sum(dt_array))
-simulator.AdvanceTo(10)
+simulator.AdvanceTo(np.sum(dt_array) + 0.5)
+# simulator.AdvanceTo(10)
 meshcat.PublishRecording()

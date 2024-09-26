@@ -1,9 +1,11 @@
 """ Miscellaneous Utility functions """
 from pydrake.all import (
     LeafSystem,
-    BasicVector,
-    AbstractValue,
+    RigidTransform,
+    RotationMatrix,
 )
+from manipulation.meshcat_utils import AddMeshcatTriad
+
 import numpy as np
 
 from src.utils import *
@@ -24,8 +26,8 @@ kv = 1.2
 kR = 0.8
 kW = 0.2
 
-class SE3Controller(LeafSystem):
-    def __init__(self):
+class Controller(LeafSystem):
+    def __init__(self, meshcat):
         LeafSystem.__init__(self)
         
         # Define input port for the current state of the drone
@@ -45,6 +47,9 @@ class SE3Controller(LeafSystem):
                                                                            4,
                                                                            self.CalcOutput)
         
+        self.meshcat = meshcat
+        self.prev_desired_state = np.zeros(18)
+        
         
     def CalcOutput(self, context, output):
         """
@@ -57,9 +62,13 @@ class SE3Controller(LeafSystem):
         drone_state = self.input_port_drone_state.Eval(context)
         # print(drone_state)
         desired_state = self.input_port_desired_state.Eval(context)
-        print(desired_state)
+        # print(desired_state)
         desired_accel = self.input_port_desired_acceleration.Eval(context)
         # print(desired_accel)
+
+        if not np.all(np.isclose(desired_state, self.prev_desired_state)):
+            AddMeshcatTriad(self.meshcat, f"Triads/Desired_State_t={context.get_time()}", X_PT=RigidTransform(RotationMatrix(desired_state[6:15].reshape((3,3))), desired_state[:3]), opacity=0.5)
+        self.prev_desired_state = desired_state
 
         # TEMPORARY
         # desired_state = np.array([0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0])

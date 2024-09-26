@@ -34,7 +34,7 @@ def continuous_dynamics(x, u):
 
     # Calculate x_dot
     p_dot = v                                                                   # Linear Velocity
-    v_dot = np.array([[0],[0],[g]]) + (f * R @ np.array([[0],[0],[1]]))/m       # Linear Acceleration (due to gravity & propellors)
+    v_dot = np.array([[0],[0],[-g]]) + (f * R @ np.array([[0],[0],[1]])) / m    # Linear Acceleration (due to gravity & propellors)
     R_dot = R @ hat_map(W)                                                      # Rotational Velocity
     W_dot = np.linalg.inv(J) @ (M - np.cross(W, J @ W))                         # Angular Acceleration
 
@@ -106,7 +106,7 @@ def trajectory_cost(pose_goal, x, u, n, N, beta=10):
 
     u is the (4,) np vector containing control inputs
     """
-    scale = np.exp((beta * (n - N)) / N)  # Exponential scaling factor
+    scale = np.exp((beta * (n - 0.8*N)) / (0.8*N))  # Exponential scaling factor
 
     # energy_cost = np.dot(u, u)
     energy_cost = 0
@@ -117,17 +117,16 @@ def trajectory_cost(pose_goal, x, u, n, N, beta=10):
     R_goal = euler_to_rotation_matrix(pose_goal[3:])
 
     # Error based on magnitude of angle difference between two rotations
-    # R_relative = R @ R_goal.T
-    # print(f"{R_relative}")
-    # trace_R = np.trace(R_relative)
-    # trace_R = soft_clamp(trace_R, -1, 3)  # Softly clamp trace between -1 and 3 so that input to arccos is within its domain [-1, 1]
-    # if trace_R.GetVariables().empty():  # Convert from symbolic expression to float value
-    #     trace_R = trace_R.Evaluate()
-    # rotation_error = np.arccos((trace_R - 1) / 2)
+    R_relative = R @ R_goal.T
+    trace_R = np.trace(R_relative)
+    trace_R = soft_clamp(trace_R, -1, 3)  # Softly clamp trace between -1 and 3 so that input to arccos is within its domain [-1, 1]
+    if trace_R.GetVariables().empty():  # Convert from symbolic expression to float value
+        trace_R = trace_R.Evaluate()
+    rotation_error = np.arccos((trace_R - 1) / 2)
 
-    # Error from taking norm of e_R (equation (8)) from Lee et al.
-    rotation_error_vec = 0.5 * vee_map(R_goal.T @ R - R.T @ R_goal)
-    rotation_error = np.sqrt(np.dot(rotation_error_vec, rotation_error_vec))  # compute norm
+    # # Error from taking norm of e_R (equation (8)) from Lee et al.
+    # rotation_error_vec = 0.5 * vee_map(R_goal.T @ R - R.T @ R_goal)
+    # rotation_error = np.sqrt(np.dot(rotation_error_vec, rotation_error_vec))  # compute norm
 
     # rotation_error = 0
     rotation_error_cost = np.dot(rotation_error, rotation_error)
@@ -137,17 +136,21 @@ def trajectory_cost(pose_goal, x, u, n, N, beta=10):
     # except:
     #     pass
 
-    return scale * (0.005*energy_cost + 0.1*translation_error_cost + 0.1*rotation_error_cost)
+    return scale * (0.001*energy_cost + 0.5*translation_error_cost + 0.1*rotation_error_cost)
 
 
 def terminal_cost(pose_goal, x, N):
     """
-    upscaled version of the cost function used at all other time steps.
+    upscaled version of the same cost function that's used at all other time
+    steps.
     """
     return 5*trajectory_cost(pose_goal, x, np.zeros(4), N, N)
 
 
 def cost_trj(pose_goal, x_trj, u_trj):
+    """
+    Calculate cost of entire trajectory.
+    """
     N = np.shape(x_trj)[0]
 
     total = 0
@@ -161,6 +164,9 @@ def cost_trj(pose_goal, x_trj, u_trj):
 
 
 class derivatives:
+    """
+    Manages symbolic variables and derivatives used in iLQR.
+    """
     def __init__(self, pose_goal, discrete_dynamics, trajectory_cost, terminal_cost, N, dt):
         n_x = 18
         n_u = 4
@@ -283,7 +289,7 @@ def V_terms(Q_x, Q_u, Q_xx, Q_ux, Q_uu, K, k):
 
 def gains(Q_uu, Q_u, Q_ux):
     """
-    Computes feedforward gains k and K 
+    Computes feedforward gains k and K.
     """
     Q_uu_inv = np.linalg.inv(Q_uu)
     k = -Q_uu_inv @ Q_u
@@ -293,7 +299,7 @@ def gains(Q_uu, Q_u, Q_ux):
 
 def expected_cost_reduction(Q_u, Q_uu, k):
     """
-    Expected cost reduction of an of back/forward passes.
+    Expected cost reduction of a back/forward pass.
     """
     return -Q_u.T.dot(k) - 0.5 * k.T.dot(Q_uu.dot(k))
 
@@ -374,7 +380,7 @@ def solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, dt, max_it
     # print(V_terms(Q_x, Q_u, Q_xx, Q_ux, Q_uu, K, k))
 
     # Initial Guesses for trajectory
-    u_trj = np.ones((N - 1, n_u)) * (m * g / 4)
+    u_trj = np.ones((N - 1, n_u)) * (m * g / 4) / kF
     # u_trj = np.random.randn(N - 1, n_u) * 0.0001
     x_trj = dynamics_rollout(x0, u_trj, dt)
     total_cost = cost_trj(pose_goal, x_trj, u_trj)
@@ -479,9 +485,9 @@ def make_basic_test_traj(x0, N, dt=0.1):
     # Convert Drake initial state representation to SE(3) form
     x0 = convert_state(x0)
     
-    u_trj = np.ones((N - 1, n_u)) * (m * g / 4)
-    u_trj[:, 2] += 0.025  # make props 2 and 3 spin faster to propel quadrotor forward
-    u_trj[:, 3] += 0.025
+    u_trj = np.ones((N - 1, n_u)) * (m * g / 4) / kF
+    # u_trj[:, 2] += 0.0001  # make props 2 and 3 spin faster to propel quadrotor forward
+    # u_trj[:, 3] += 0.0001
     x_trj = dynamics_rollout(x0, u_trj, dt)
 
     # Generate list of time steps corresponding to each x and u in the trajectory

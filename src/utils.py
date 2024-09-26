@@ -12,12 +12,14 @@ import pydot
 import numpy as np
 from scipy.spatial.transform import Rotation
 
+np.set_printoptions(precision=3)
+
 
 # Quadrotor Constants (derived from quadrotor MultibodyPlant)
 m = 0.775       # quadrotor mass
 L = 0.15        # distance from the center of mass to the center of each rotor in the b1, b2 plane
-kM = 1e-5       # relates moment applied to quadrotor to the thurst generated
-kF = 1e-3       # Force input constant
+kM = 1e-3       # relates moment applied to quadrotor to the thurst generated
+kF = 1          # Force input constant
 g = 9.81        # gravity
 J = np.array([[1.50000000e-03, 0.00000000e+00, 2.02795951e-16],
               [0.00000000e+00, 2.50000000e-03, 0.00000000e+00],
@@ -137,7 +139,7 @@ def soft_clamp(x, mi, mx):
     scaled = (x - mi) / (mx - mi)
     exponent = -scaled + 0.5
     base = 99999
-    print(f"{exponent=}")
+    # print(f"{exponent=}")
     return mi + (mx - mi) * sym.pow(1 + sym.pow(base, exponent), -1)
 
 
@@ -230,7 +232,7 @@ class TrajectoryDesiredStateSource(LeafSystem):
 
     def CalcDesiredState(self, context, output):
         """
-        Simply convert the state representation and set the output
+        Simply set the correct output based on current time.
         """
         traj = self.input_port_traj.Eval(context)
 
@@ -241,10 +243,9 @@ class TrajectoryDesiredStateSource(LeafSystem):
         if t > self.traj_elapsed_time + self.dt_array[self.n]:
             self.traj_elapsed_time += self.dt_array[self.n]
             self.n = min(self.n+1, self.N-1)  # prevent out of bounds error
-            # print(f"==========OUTPUTTING NEW DESIRED STATE: {traj[self.n]}==========")
+            print(f"==========OUTPUTTING NEW DESIRED STATE: {traj[self.n]}==========")
 
         desired_state = traj[self.n]
-        np.set_printoptions(precision=3)
         output.SetFromVector(desired_state)
 
 
