@@ -20,28 +20,13 @@ def continuous_dynamics(x, u):
     """
     Dynamics equation based on https://arxiv.org/pdf/1003.2005.
 
+    x is the (18,) np vector containing the current state in SE(3) form.
+
     u is a (4,) np vector of propeller forces.
-
-    x is the (18,) np vector containing the current state.
-
-    Notation:
-     - p = position vector \in R3
-     - W = angular velocity \in R3
-    """    
-    # [f, M1, M2, M3].T
-    # net_force_moments_vector = np.array([[1, 1, 1, 1],
-    #                                      [L/np.sqrt(2), L/np.sqrt(2), -L/np.sqrt(2), -L/np.sqrt(2)],
-    #                                      [-L/np.sqrt(2), L/np.sqrt(2), L/np.sqrt(2), -L/np.sqrt(2)],
-    #                                      [-kM, kM, -kM, kM]]) @ u
-    net_force_moments_vector = np.array([[1, 1, 1, 1],
-                                         [0, L, 0, -L],
-                                         [-L, 0, L, 0],
-                                         [kM, -kM, kM, -kM]]) @ u
-
-    # scalar net force in -b3 direction 
-    f = net_force_moments_vector[0]
-    # (3,1) moment vector 
-    M = net_force_moments_vector[1:]
+    """
+    net_force_moments_vector = F2W @ u
+    f = net_force_moments_vector[0]     # scalar net force in -b3 direction 
+    M = net_force_moments_vector[1:]    # (3,1) moment vector 
 
     R = x[6:15].reshape(3, 3)  # Rotation
     v = x[3:6]  # Linear Velocity
@@ -51,7 +36,7 @@ def continuous_dynamics(x, u):
     p_dot = v                                                                   # Linear Velocity
     v_dot = np.array([[0],[0],[g]]) + (f * R @ np.array([[0],[0],[1]]))/m       # Linear Acceleration (due to gravity & propellors)
     R_dot = R @ hat_map(W)                                                      # Rotational Velocity
-    W_dot = np.linalg.inv(I) @ (M - np.cross(W, I @ W))                         # Angular Acceleration
+    W_dot = np.linalg.inv(J) @ (M - np.cross(W, J @ W))                         # Angular Acceleration
 
     # Also return the current rotation and angular velocity to do exponential map method of integrating rotation
     return np.concatenate((p_dot, v_dot.flatten(), R_dot.flatten(), W_dot)), R, W
@@ -69,9 +54,9 @@ def discrete_dynamics(x, u, n, dt_nominal):
     Calculates next state based on current state and control input, using
     continuous dynamics.
 
-    u is a (4,) np vector of propeller forces.
+    x is the (18,) np vector containing the current state in SE(3) form.
 
-    x is the (18,) np vector containing the current state.
+    u is a (4,) np vector of propeller forces.
     """
     dt = compute_discrete_dynamics_time_step(n, dt_nominal)
 
@@ -88,14 +73,17 @@ def discrete_dynamics(x, u, n, dt_nominal):
     # print(f"{R_new=}")
 
     # Euler Integration for other components of state
-    return np.concatenate((x[:6]+x_dot[:6]*dt, R_new.flatten(), x[15:]+x_dot[15:]*dt))
+    x_new = x[:3]+x_dot[:3]*dt
+    v_new = x[3:6]+x_dot[3:6]*dt
+    W_new = x[15:]+x_dot[15:]*dt
+    return np.concatenate((x_new, v_new, R_new.flatten(), W_new))
 
 
 def dynamics_rollout(x0, u_trj, dt):
     """
     Computes x_trj, the state trajectory, given a sequence of control inputs.
 
-    x0 is the initial state vector.
+    x0 is the initial (18,) state vector in SE(3) form.
 
     u_trj is a (N,4) array containing sequence of control inputs in the trajectory.
     """
@@ -154,7 +142,7 @@ def trajectory_cost(pose_goal, x, u, n, N, beta=10):
 
 def terminal_cost(pose_goal, x, N):
     """
-    Terminal cost is the distance to the goal.
+    upscaled version of the cost function used at all other time steps.
     """
     return 5*trajectory_cost(pose_goal, x, np.zeros(4), N, N)
 
@@ -284,7 +272,7 @@ def V_terms(Q_x, Q_u, Q_xx, Q_ux, Q_uu, K, k):
     # print(f"np.shape(K): {np.shape(K)}")
     # print(f"np.shape(k): {np.shape(k)}")
 
-    #18x1  1x18    4x1  2x5  1x2   2x5    1x2   2x2   2x5
+    #18x1  1x18    4x1    2x5  1x2   2x5    1x2   2x2   2x5
     V_x = (Q_x.T + Q_u.T @ K + k.T @ Q_ux + k.T @ Q_uu @ K).T
 
     #5x5   5x5    5x2     2x5  5x2   2x5    5x2   2x2   2x5
@@ -371,18 +359,8 @@ def backward_pass(derivs, x_trj, u_trj, regu):
 
 def solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, dt, max_iter=200, regu_init=100):
     """
-    x0 is the Drake default [x, y, z, R, P, Y, x_dot, y_dot, z_dot, R_dot, P_dot, Y_dot] state vector.
-
-    pose_goal is a [x, y, z, R, P, Y] vector.
+    Solve for a trajectory given the number of time steps and time interval.
     """
-    # First, convert Drake initial state representation to SE(3) form [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
-    R0 = euler_to_rotation_matrix(x0[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
-    W0 = rpy_rates_to_angular_velocity(x0[11:8:-1], x0[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
-    x0 = np.concatenate((x0[:3], x0[6:9], R0.flatten(), W0))
-
-    Rf = euler_to_rotation_matrix(pose_goal[3:6])
-    xf = np.concatenate((pose_goal[:3], np.zeros(3), Rf.flatten(), np.zeros(3)))
-
     derivs = derivatives(pose_goal, discrete_dynamics, trajectory_cost, terminal_cost, N, dt)
 
     # u_trj = np.random.randn(N - 1, n_u) * 0.0001
@@ -395,9 +373,8 @@ def solve_trajectory_fixed_timesteps_fixed_interval(x0, pose_goal, N, dt, max_it
     # print(gains(Q_uu, Q_u, Q_ux))
     # print(V_terms(Q_x, Q_u, Q_xx, Q_ux, Q_uu, K, k))
 
-
     # Initial Guesses for trajectory
-    u_trj = np.ones((N - 1, n_u)) * (-m * g / 4)
+    u_trj = np.ones((N - 1, n_u)) * (m * g / 4)
     # u_trj = np.random.randn(N - 1, n_u) * 0.0001
     x_trj = dynamics_rollout(x0, u_trj, dt)
     total_cost = cost_trj(pose_goal, x_trj, u_trj)
@@ -454,7 +431,18 @@ def solve_trajectory(x0, pose_goal, N, num_dt_to_search=3):
     """
     Run iLQR to generat an optimal trajectory, while performing Linear Search to
     find optimal time interval dt.
+
+    x0 is the Drake default [x, y, z, R, P, Y, x_dot, y_dot, z_dot, R_dot, P_dot, Y_dot] state vector.
+
+    pose_goal is a [x, y, z, R, P, Y] vector.
     """
+    # Convert Drake initial state representation to SE(3) form
+    x0 = convert_state(x0)
+
+    # Convert user-defined goal pose to SE(3) form
+    Rf = euler_to_rotation_matrix(pose_goal[3:6])
+    xf = np.concatenate((pose_goal[:3], np.zeros(3), Rf.flatten(), np.zeros(3)))
+
     min_cost = np.inf
     min_cost_traj = []
     min_cost_time_interval = 0
@@ -468,7 +456,7 @@ def solve_trajectory(x0, pose_goal, N, num_dt_to_search=3):
             min_cost_traj = [x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace]
             min_cost_time_interval = i
 
-    # Compute errors at the very end of the trajectory
+    # Compute errors at the very end of the trajectory (for debugging purposes)
     final_translation_error = np.linalg.norm(x_trj[-1][:3] - pose_goal[:3])
     R = x_trj[-1][6:15].reshape(3, 3)
     R_goal = euler_to_rotation_matrix(pose_goal[3:])
@@ -484,14 +472,16 @@ def solve_trajectory(x0, pose_goal, N, num_dt_to_search=3):
 
 
 def make_basic_test_traj(x0, N, dt=0.1):
-    # First, convert Drake initial state representation to SE(3) form [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
-    R0 = euler_to_rotation_matrix(x0[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
-    W0 = rpy_rates_to_angular_velocity(x0[11:8:-1], x0[5:2:-1])  # NOTE: THE ORDER OF ROLL PITCH YAW IN THE STATE REPRESETATION IS rz,ry,rxs
-    x0 = np.concatenate((x0[:3], x0[6:9], R0.flatten(), W0))
+    """
+    For testing purposes, build very simple trajectory by just rolling out the
+    dynamics of a drone hovering with a slight forward command.
+    """
+    # Convert Drake initial state representation to SE(3) form
+    x0 = convert_state(x0)
     
-    u_trj = np.ones((N - 1, n_u)) * (-m * g / 4)
-    # u_trj[:, 2] += 0.025  # make prop 3 spin faster to propel quadrotor forward
-    u_trj[:, 3] += 0.025  # make prop 4 spin faster to propel quadrotor left
+    u_trj = np.ones((N - 1, n_u)) * (m * g / 4)
+    u_trj[:, 2] += 0.025  # make props 2 and 3 spin faster to propel quadrotor forward
+    u_trj[:, 3] += 0.025
     x_trj = dynamics_rollout(x0, u_trj, dt)
 
     # Generate list of time steps corresponding to each x and u in the trajectory

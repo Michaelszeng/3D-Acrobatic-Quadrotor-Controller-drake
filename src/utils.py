@@ -141,7 +141,35 @@ def soft_clamp(x, mi, mx):
     return mi + (mx - mi) * sym.pow(1 + sym.pow(base, exponent), -1)
 
 
+def convert_state(drone_state):
+    """
+    From Drake's state format to SE(3) format.
+
+    Drake's state format is:
+    [qw, qx, qy, qz, x, y, z, w1, w2, w3, x_dot, y_dot, z_dot].T
+
+    SE(3) format is:
+    [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
+    """
+    x = drone_state[4:7]
+    v = drone_state[10:13]
+    W = drone_state[7:10]
+
+    qw = drone_state[0]
+    qx = drone_state[1]
+    qy = drone_state[2]
+    qz = drone_state[3]
+    R = Rotation.from_quat([qx, qy, qz, qw]).as_matrix()
+
+    drone_state_se3 = np.concatenate((x, v, R.flatten(), W))
+    return drone_state_se3
+
+
 class StateConverter(LeafSystem):
+    """
+    Converts Drake's state output to an SE(3) format for DDP and controller to 
+    use.
+    """
     def __init__(self):
         LeafSystem.__init__(self)
         
@@ -157,27 +185,17 @@ class StateConverter(LeafSystem):
         
     def CalcOutput(self, context, output):
         """
-        Simply convert the state representation and set the output
+        Simply convert the state representation and set the output.
         """
         drone_state = self.get_input_port(0).Eval(context)
+        output.SetFromVector(convert_state(drone_state))
 
-        # print(f"{drone_state=}")
-
-        x = drone_state[4:7]
-        v = drone_state[10:13]
-        W = drone_state[7:10]
-
-        qw = drone_state[0]
-        qx = drone_state[1]
-        qy = drone_state[2]
-        qz = drone_state[3]
-        R = Rotation.from_quat([qx, qy, qz, qw]).as_matrix()
-
-        drone_state_se3 = np.concatenate((x, v, R.flatten(), W))
-
-        output.SetFromVector(drone_state_se3)
 
 class TrajectoryDesiredStateSource(LeafSystem):
+    """
+    Output the desired state and acceleration based on the target trajectory and
+    current time.
+    """
     def __init__(self):
         LeafSystem.__init__(self)
 
@@ -188,13 +206,18 @@ class TrajectoryDesiredStateSource(LeafSystem):
         # Define output port for desired drone state in SE(3) form:
         # [x, y, z, x_dot, y_dot, z_dot, R1, R2, R3, R4, R5, R6, R7, R8, R9, W1, W2, W3].T
         self.output_port_drone_state_se3 = self.DeclareVectorOutputPort("trajectory_desired_state",
-                                                                        BasicVector(18),
-                                                                        self.CalcDesiredState)
+                                                                         BasicVector(18),
+                                                                         self.CalcDesiredState)
         
         # Define output port for desired drone acceleration
         self.output_port_drone_acceleration = self.DeclareVectorOutputPort("trajectory_desired_acceleration",
                                                                             BasicVector(3),
                                                                             self.CalcDesiredAccel)
+        
+        # Define output port for desired drone angular acceleration
+        self.output_port_drone_acceleration = self.DeclareVectorOutputPort("trajectory_desired_angular_acceleration",
+                                                                            BasicVector(3),
+                                                                            self.CalcDesiredAngularAccel)
         
         self.n = 0
         self.traj_elapsed_time = 0
@@ -224,6 +247,12 @@ class TrajectoryDesiredStateSource(LeafSystem):
         np.set_printoptions(precision=3)
         output.SetFromVector(desired_state)
 
+
     def CalcDesiredAccel(self, context, output):
         desired_accel = np.array([0, 0, 0])
         output.SetFromVector(desired_accel)
+
+
+    def CalcDesiredAngularAccel(self, context, output):
+        desired_angular_accel = np.array([0, 0, 0])
+        output.SetFromVector(desired_angular_accel)

@@ -49,7 +49,7 @@ pose_goal = np.array([0, 0, 3, 3.14, 0, 0])
 ##### Diagram Setup
 ################################################################################
 builder = DiagramBuilder()
-plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.00001)
+plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
 parser = Parser(plant)
 (model_instance,) = parser.AddModelsFromUrl("package://drake/examples/quadrotor/quadrotor.urdf")
 
@@ -106,6 +106,10 @@ builder.Connect(
     se3_controller.GetInputPort("desired_acceleration")
 )
 builder.Connect(
+    desired_state_source.GetOutputPort("trajectory_desired_angular_acceleration"),
+    se3_controller.GetInputPort("desired_angular_acceleration")
+)
+builder.Connect(
     se3_controller.GetOutputPort("controller_output"),
     propellers.get_command_input_port()
 )
@@ -159,7 +163,7 @@ N=20  # Number of time steps in trajectory
 # print(f"final_translation_error: {final_translation_error:>25}    final_rotation_error: {final_rotation_error:>25}")
 
 
-# x_trj, u_trj, dt_array = make_basic_test_traj(np.array([x0, y0, z0, rz0, ry0, rx0, 0, 0, 0, 0, 0, 0]), N)
+x_trj, u_trj, dt_array = make_basic_test_traj(np.array([x0, y0, z0, roll0, pitch0, yaw0, 0, 0, 0, 0, 0, 0]), N)
 
 
 # x_trj = np.array([[-1.50000000e+00,  0.00000000e+00,  1.00000000e+00,
@@ -304,9 +308,6 @@ N=20  # Number of time steps in trajectory
 # dt_array = np.array([0.020000000000000004, 0.042857142857142864, 0.05555555555555556, 0.06363636363636364, 0.06923076923076923, 0.07333333333333333, 0.07647058823529412, 0.07894736842105264, 0.08095238095238096, 0.08260869565217392, 0.084, 0.0851851851851852, 0.08620689655172414, 0.08709677419354839, 0.08787878787878789, 0.08857142857142858, 0.0891891891891892, 0.08974358974358974, 0.0902439024390244, 0.09069767441860466])
 
 
-dt_array = np.array([0.1])
-x_trj = np.array([[0,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0]])
-
 # Visualize Trajectory
 pos_3d_matrix = x_trj[:,:3].T
 meshcat.SetLine("ddp traj", pos_3d_matrix)
@@ -326,7 +327,5 @@ meshcat.StartRecording()
 #     simulator.AdvanceTo(t)
 
 # simulator.AdvanceTo(np.sum(dt_array))
-
-simulator.AdvanceTo(3)
-
+simulator.AdvanceTo(10)
 meshcat.PublishRecording()

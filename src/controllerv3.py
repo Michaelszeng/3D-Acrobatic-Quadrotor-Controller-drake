@@ -19,8 +19,8 @@ Note: W is w.r.t. body-fixed frame
 
 
 # Control gains
-kx = 0.8
-kv = 0.8
+kp = 1.2
+kv = 1.2
 kR = 0.8
 kW = 0.2
 
@@ -36,6 +36,9 @@ class SE3Controller(LeafSystem):
 
         # Define input port for the desired acceleration from the DDP trajectory
         self.input_port_desired_acceleration = self.DeclareVectorInputPort("desired_acceleration", 3)
+
+        # Define input port for the desired angular acceleration from the DDP trajectory
+        self.input_port_desired_acceleration = self.DeclareVectorInputPort("desired_angular_acceleration", 3)
         
         # Define output port for the controller output
         self.output_port_controller_output = self.DeclareVectorOutputPort("controller_output",
@@ -51,37 +54,35 @@ class SE3Controller(LeafSystem):
             context: The Context object containing the input data.
             output: The output port to which the computed controller output is set.
         """
-        # Retrieve input data from input ports
         drone_state = self.input_port_drone_state.Eval(context)
         # print(drone_state)
         desired_state = self.input_port_desired_state.Eval(context)
-        # print(desired_state)
+        print(desired_state)
         desired_accel = self.input_port_desired_acceleration.Eval(context)
         # print(desired_accel)
 
         # TEMPORARY
-        desired_state = np.array([0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0])
-        desired_accel = np.array([0, 0, 0])
+        # desired_state = np.array([0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0])
+        # desired_accel = np.array([0, 0, 0])
 
         # Current State
-        x = drone_state[:3]                     # position in inertial frame
+        p = drone_state[:3]                     # position in inertial frame
         v = drone_state[3:6]                    # velocity in inertial frame
-        R = drone_state[6:15].reshape(3, 3)     # rotation
-        W = R.T @ drone_state[15:]              # angular velocity in body frame (convert from world to body frame)
+        R = drone_state[6:15].reshape(3, 3)     # rotation (^W R^B)
+        W = R.T @ drone_state[15:]              # angular velocity in body frame (convert from inertial to body frame)
 
         # Desired position/velocity/acceleration/yaw
-        xd = desired_state[:3]                      # desired position in inertial frame
+        pd = desired_state[:3]                      # desired position in inertial frame
         vd = desired_state[3:6]                     # desired velocity in inertial frame
         ad = desired_accel                          # desired accel in inertial frame
         yawd = np.arctan2(desired_state[9], desired_state[6])  # desired yaw = arctan(R_21 / R_11)
+        Wd = R.T @ desired_state[15:]                     # desired angular velocity in body frame (convert from inertial to body frame)
 
         # Error Values
-        ex = x - xd     # position error in inertial frame
+        ep = p - pd     # position error in inertial frame
         ev = v - vd     # velocity error in inertial frame
-        # print(f"{ex=}")
-        # print(f"{ev=}")
 
-        b3d = -kx*ex- kv*ev + m*g*e3 + m*ad
+        b3d = -kp*ep- kv*ev + m*g*e3 + m*ad
         b3d /= np.linalg.norm(b3d)
         b1d = np.array([np.cos(yawd), np.sin(yawd), 0.])
         b2d = np.cross(b3d, b1d)
@@ -90,16 +91,15 @@ class SE3Controller(LeafSystem):
         Rd = np.hstack((np.cross(b2d, b3d).reshape(3, 1), b2d.reshape(3, 1), b3d.reshape(3, 1)))
         
         eR = 0.5 * vee_map(Rd.T @ R - R.T @ Rd)
-        eW = W  # TODO: UPDATE
+        eW = W - Wd  # Wd is already expressed in body frame, so there is no need to transform it
 
-        f_z = (-kx*ex- kv*ev + m*g*e3 + m*ad).dot(R * e3)[2]  # Project ideal force into body-frame Z-axis
+        # Compute desired force and moment
+        f = -kp*ep- kv*ev + m*g*e3 + m*ad  # Ideal force vector in world frame
+        f_z = (f).dot(R * e3)[2]  # Project ideal force into body-frame Z-axis and take z-component
         M = -kR*eR - kW*eW + np.cross(W, J @ W)
 
-        # print(f"{f_z=}")
-        # print(f"{M=}")
-
+        # Backsolve rotor velocities from desired force and moment
         u = np.linalg.inv(F2W) @ np.concatenate(([f_z], M))
         # print(f"{u=}")
 
-        # Set output
         output.SetFromVector(u)
