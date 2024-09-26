@@ -21,10 +21,10 @@ Note: W is w.r.t. body-fixed frame
 
 
 # Control gains
-kp = 1.2
-kv = 1.2
-kR = 0.8
-kW = 0.2
+kp = 10.0
+kv = 14.0
+kR = 10.0
+kW = 2.0
 
 class Controller(LeafSystem):
     def __init__(self, meshcat):
@@ -71,7 +71,7 @@ class Controller(LeafSystem):
         self.prev_desired_state = desired_state
 
         # TEMPORARY
-        # desired_state = np.array([0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0])
+        # desired_state = np.array([0, 0, 4, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0.1])
         # desired_accel = np.array([0, 0, 0])
 
         # Current State
@@ -90,6 +90,7 @@ class Controller(LeafSystem):
         # Error Values
         ep = p - pd     # position error in inertial frame
         ev = v - vd     # velocity error in inertial frame
+        print(f"{ep=}")
 
         b3d = -kp*ep- kv*ev + m*g*e3 + m*ad
         b3d /= np.linalg.norm(b3d)
@@ -103,7 +104,7 @@ class Controller(LeafSystem):
         eW = W - Wd  # Wd is already expressed in body frame, so there is no need to transform it
 
         # Compute desired force and moment
-        f = -kp*ep- kv*ev + m*g*e3 + m*ad  # Ideal force vector in world frame
+        f = -kp*ep - kv*ev + m*g*e3 + m*ad  # Ideal force vector in world frame
         f_z = (f).dot(R * e3)[2]  # Project ideal force into body-frame Z-axis and take z-component
         M = -kR*eR - kW*eW + np.cross(W, J @ W)
 

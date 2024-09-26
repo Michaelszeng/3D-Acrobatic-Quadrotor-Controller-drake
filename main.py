@@ -58,6 +58,7 @@ parser = Parser(plant)
 # Add visual quadrotor to show the desired pose of the main quadrotor
 (visual_quadrotor_model_instance,) = parser.AddModelsFromUrl(f"file://{os.path.abspath('assets/visual_quadrotor.urdf')}")
 visual_quadrotor_pose = RigidTransform(RollPitchYaw(pose_goal[3:]), pose_goal[:3])
+plant.WeldFrames(plant.world_frame(), plant.GetFrameByName("visual_quadrotor_base_link"), visual_quadrotor_pose)
 
 plant.Finalize()
 
@@ -139,12 +140,6 @@ context = simulator.get_mutable_context()
 plant_context = plant.GetMyMutableContextFromRoot(context)
 propellers_context = propellers.GetMyMutableContextFromRoot(context)
 desired_state_source_context = desired_state_source.GetMyMutableContextFromRoot(context)
-
-# Set visual quadrotor position
-plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("visual_quadrotor_base_link"), visual_quadrotor_pose)
-visual_quadrotor_joint_idx = plant.GetJointIndices(visual_quadrotor_model_instance)[0]
-visual_quadrotor_joint = plant.get_joint(visual_quadrotor_joint_idx)  # Joint object
-visual_quadrotor_joint.Lock(plant_context)
 
 # Set initial state
 plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("base_link"), RigidTransform(RollPitchYaw(roll0, pitch0, yaw0), [x0, y0, z0]))
@@ -319,6 +314,7 @@ AddMeshcatTriad(meshcat, f"Triads/Goal_Pose", X_PT=RigidTransform(RotationMatrix
 
 # Pass trajectory to TrajectoryDesiredStateSource
 desired_state_source.set_time_intervals(dt_array)
+desired_state_source.set_initial_state(plant.get_state_output_port().Eval(plant_context))
 desired_state_source.GetInputPort("trajectory").FixValue(desired_state_source_context, x_trj)
 
 # Run the simulation
@@ -331,6 +327,6 @@ meshcat.StartRecording()
 #     t += dt_array[i]
 #     simulator.AdvanceTo(t)
 
-simulator.AdvanceTo(np.sum(dt_array) + 0.5)
-# simulator.AdvanceTo(10)
+# simulator.AdvanceTo(np.sum(dt_array) + 0.5)
+simulator.AdvanceTo(10)
 meshcat.PublishRecording()

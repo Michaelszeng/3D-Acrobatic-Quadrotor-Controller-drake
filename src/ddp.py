@@ -482,12 +482,20 @@ def make_basic_test_traj(x0, N, dt=0.1):
     For testing purposes, build very simple trajectory by just rolling out the
     dynamics of a drone hovering with a slight forward command.
     """
+    N=200
+    dt=0.025
+
     # Convert Drake initial state representation to SE(3) form
+    print(x0)
+
     x0 = convert_state(x0)
-    
+
+    print(x0)
+
     u_trj = np.ones((N - 1, n_u)) * (m * g / 4) / kF
-    # u_trj[:, 2] += 0.0001  # make props 2 and 3 spin faster to propel quadrotor forward
-    # u_trj[:, 3] += 0.0001
+    u_trj[:10, 1] += 0.01  # make props 2 and 3 spin faster to propel quadrotor forward
+    u_trj[:10, 2] += 0.01
+    u_trj[:10, 3] += 0.01
     x_trj = dynamics_rollout(x0, u_trj, dt)
 
     # Generate list of time steps corresponding to each x and u in the trajectory

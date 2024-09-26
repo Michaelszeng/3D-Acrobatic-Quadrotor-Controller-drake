@@ -228,6 +228,10 @@ class TrajectoryDesiredStateSource(LeafSystem):
     def set_time_intervals(self, dt_array):
         self.dt_array = dt_array
         self.N = np.shape(dt_array)[0]
+
+
+    def set_initial_state(self, x0):
+        self.x0 = convert_state(x0)
         
 
     def CalcDesiredState(self, context, output):
@@ -250,10 +254,24 @@ class TrajectoryDesiredStateSource(LeafSystem):
 
 
     def CalcDesiredAccel(self, context, output):
-        desired_accel = np.array([0, 0, 0])
+        traj = self.input_port_traj.Eval(context)
+
+        # Difference Quotient of desired velocity
+        if self.n == 0:
+            desired_accel = (traj[self.n][3:6] - self.x0[3:6]) / self.dt_array[self.n]
+        else:
+            desired_accel = (traj[self.n][3:6] - traj[self.n-1][3:6]) / self.dt_array[self.n]
+
         output.SetFromVector(desired_accel)
 
 
     def CalcDesiredAngularAccel(self, context, output):
-        desired_angular_accel = np.array([0, 0, 0])
+        traj = self.input_port_traj.Eval(context)
+
+        # Difference Quotient of desired angular velocity
+        if self.n == 0:
+            desired_angular_accel = (traj[self.n][15:] - self.x0[15:]) / self.dt_array[self.n]
+        else:
+            desired_angular_accel = (traj[self.n][15:] - traj[self.n-1][15:]) / self.dt_array[self.n]
+
         output.SetFromVector(desired_angular_accel)
