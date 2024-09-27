@@ -28,8 +28,25 @@ Note: W is w.r.t. body-fixed frame
 
 kp = 50.0
 kv = 50.0
-kR = 0.5
-kW = 0.425
+kR = 3.0
+kW = 2.55
+
+"""
+TRANSLATION CONTROLLER
+We select a natural frequency such that the "settling time" (the time it takes
+for the error to decay to a small fraction of its initial value) of the
+controller is roughly the interval between target states in the trajectory:
+
+t = 0.1 = 4 / zeta*omega_n
+
+This implies: zeta = 4 / t*omega_n
+
+For a critically damped system response, we want: 
+
+zeta = kv / 2*m*sqrt(kp/m) = 1
+
+Solving this system, we get that kp = 1240, kv = 62
+"""
 
 
 class Controller(LeafSystem):
