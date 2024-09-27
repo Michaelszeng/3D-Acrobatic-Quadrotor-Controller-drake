@@ -66,9 +66,10 @@ parser = Parser(plant)
 (model_instance,) = parser.AddModelsFromUrl("package://drake/examples/quadrotor/quadrotor.urdf")
 
 # Add visual quadrotor to show the desired pose of the main quadrotor
-(visual_quadrotor_model_instance,) = parser.AddModelsFromUrl(f"file://{os.path.abspath('assets/visual_quadrotor.urdf')}")
-visual_quadrotor_pose = RigidTransform(RollPitchYaw(pose_goal[3:]), pose_goal[:3])
-plant.WeldFrames(plant.world_frame(), plant.GetFrameByName("visual_quadrotor_base_link"), visual_quadrotor_pose)
+if not USE_PRE_COMPUTED_TRAJECTORY:
+    (visual_quadrotor_model_instance,) = parser.AddModelsFromUrl(f"file://{os.path.abspath('assets/visual_quadrotor.urdf')}")
+    visual_quadrotor_pose = RigidTransform(RollPitchYaw(pose_goal[3:]), pose_goal[:3])
+    plant.WeldFrames(plant.world_frame(), plant.GetFrameByName("visual_quadrotor_base_link"), visual_quadrotor_pose)
 
 if SHOW_GHOST_QUADROTORS: 
     ghost_quad_instances = show_ghost_quadrotors(parser)
@@ -226,7 +227,7 @@ meshcat.StartRecording()
 #     t += dt_array[i]
 #     simulator.AdvanceTo(t)
 
-simulator.AdvanceTo(np.sum(dt_array) + 0.001)
+simulator.AdvanceTo(np.sum(dt_array) + 0.01)
 meshcat.PublishRecording()
 time.sleep(5)
 
