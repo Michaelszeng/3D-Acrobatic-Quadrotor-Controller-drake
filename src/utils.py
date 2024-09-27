@@ -12,6 +12,7 @@ import pydot
 import numpy as np
 from scipy.spatial.transform import Rotation
 import pickle
+import os
 
 np.set_printoptions(precision=3)
 
@@ -207,6 +208,66 @@ def load_trajectory_data(filename):
         trajectory_data['final_translation_error'],
         trajectory_data['final_rotation_error']
     )
+
+
+def show_ghost_quadrotors(parser):
+    """
+    Add ghost quadrotors to scene.
+    """
+    quad_instances = []
+    for i in range(10):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        urdf = f"""
+<?xml version="1.0"?>
+<robot name="visual_quadrotor{i}">
+    <link name="visual_quadrotor_base_link">
+        <inertial>
+        <mass value="0.775"/>
+        <origin xyz="0 0 0"/>
+        <inertia ixx="0.0015" ixy="0.0" ixz="0.0" iyy="0.0025" iyz="0.0" izz="0.0035"/>
+        </inertial>
+        <visual>
+        <origin rpy="1.570796 0 0" xyz="0 0 0"/>
+        <geometry>
+            <mesh filename="file://{os.path.join(current_dir, '../assets/skydio_2_1000_poly.obj')}" scale=".00254"/>
+        </geometry>
+        </visual>
+    </link>
+</robot>
+"""
+        (visual_quadrotor_model_instance,) = parser.AddModelsFromString(urdf, ".urdf")
+        quad_instances.append(visual_quadrotor_model_instance)
+
+    return quad_instances
+
+
+def counter_to_rgba(counter, num_trj):
+    """
+    Return a gradient RGBA value based on the value of counter. Used to
+    visualize the progress of the iLQR traj opt.
+    """
+    if counter < 0 or counter > num_trj:
+        raise ValueError("Counter must be between 0 and num_trj inclusive.")
+
+    if num_trj == 0:
+        return (0, 0, 0, 1)  # Black, if there are no steps in the trajectory
+
+    # Normalize the counter value to a range from 0 to 1
+    normalized_counter = counter / num_trj
+
+    # Calculate the color components
+    if normalized_counter <= 0.5:
+        # Transition from red to blue
+        r = 1 - 2 * normalized_counter
+        g = 0
+        b = 2 * normalized_counter
+    else:
+        # Transition from blue to green
+        r = 0
+        g = 2 * (normalized_counter - 0.5)
+        b = 1 - 2 * (normalized_counter - 0.5)
+    
+    return (r, g, b, 1)  # RGBA format with full opacity
 
 
 class StateConverter(LeafSystem):

@@ -19,38 +19,13 @@ Note: R is rotation from body-fixed frame to world frame ({}^W R^B)
 Note: W is w.r.t. body-fixed frame
 """
 
-
-# Control gains
-# kp = 8.0
-# kv = 10.0
-# kR = 5.0
-# kW = 2.0
-
 kp = 50.0
 kv = 50.0
 kR = 3.0
 kW = 2.55
 
-"""
-TRANSLATION CONTROLLER
-We select a natural frequency such that the "settling time" (the time it takes
-for the error to decay to a small fraction of its initial value) of the
-controller is roughly the interval between target states in the trajectory:
-
-t = 0.1 = 4 / zeta*omega_n
-
-This implies: zeta = 4 / t*omega_n
-
-For a critically damped system response, we want: 
-
-zeta = kv / 2*m*sqrt(kp/m) = 1
-
-Solving this system, we get that kp = 1240, kv = 62
-"""
-
-
 class Controller(LeafSystem):
-    def __init__(self, meshcat):
+    def __init__(self, meshcat, SHOW_TRIADS):
         LeafSystem.__init__(self)
         
         # Define input port for the current state of the drone
@@ -72,6 +47,7 @@ class Controller(LeafSystem):
         
         self.meshcat = meshcat
         self.prev_desired_state = np.zeros(18)
+        self.SHOW_TRIADS = SHOW_TRIADS
         
         
     def CalcOutput(self, context, output):
@@ -90,7 +66,7 @@ class Controller(LeafSystem):
         # print(desired_accel)
         desired_angular_accel = self.input_port_desired_angular_acceleration.Eval(context)
 
-        if not np.all(np.isclose(desired_state, self.prev_desired_state)):
+        if self.SHOW_TRIADS and not np.all(np.isclose(desired_state, self.prev_desired_state)):
             AddMeshcatTriad(self.meshcat, f"Triads/Desired_State_t={context.get_time()}", X_PT=RigidTransform(RotationMatrix(desired_state[6:15].reshape((3,3))), desired_state[:3]), opacity=0.5)
         self.prev_desired_state = desired_state
 
