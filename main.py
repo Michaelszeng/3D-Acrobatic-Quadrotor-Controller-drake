@@ -331,7 +331,7 @@ meshcat.StartRecording()
 #     t += dt_array[i]
 #     simulator.AdvanceTo(t)
 
-simulator.AdvanceTo(np.sum(dt_array) + 0.1)
+simulator.AdvanceTo(np.sum(dt_array) + 0.001)
 # simulator.AdvanceTo(10)
 meshcat.PublishRecording()
 time.sleep(5)

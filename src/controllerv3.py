@@ -29,7 +29,7 @@ Note: W is w.r.t. body-fixed frame
 kp = 50.0
 kv = 50.0
 kR = 0.5
-kW = 2.0
+kW = 0.425
 
 
 class Controller(LeafSystem):
@@ -88,12 +88,12 @@ class Controller(LeafSystem):
         W = R.T @ drone_state[15:]              # angular velocity in body frame (convert from inertial to body frame)
 
         # Desired position/velocity/acceleration/yaw
-        pd = desired_state[:3]                      # desired position in inertial frame
-        vd = desired_state[3:6]                     # desired velocity in inertial frame
-        ad = desired_accel                          # desired accel in inertial frame
+        pd = desired_state[:3]                  # desired position in inertial frame
+        vd = desired_state[3:6]                 # desired velocity in inertial frame
+        ad = desired_accel                      # desired accel in inertial frame
         yawd = np.arctan2(desired_state[9], desired_state[6])  # desired yaw = arctan(R_21 / R_11)
-        Wd = R.T @ desired_state[15:]               # desired angular velocity in body frame (convert from inertial to body frame)
-        Ad = R.T @ desired_angular_accel                  # desired angular acceleration in body frame (convert from inertial to body frame)
+        Wd = R.T @ desired_state[15:]           # desired angular velocity in body frame (convert from inertial to body frame)
+        Ad = R.T @ desired_angular_accel        # desired angular acceleration in body frame (convert from inertial to body frame)
 
         # Error Values
         ep = p - pd     # position error in inertial frame
@@ -110,7 +110,7 @@ class Controller(LeafSystem):
         eR = 0.5 * vee_map(Rd.T @ R - R.T @ Rd)
         eW = W - Wd  # Wd is already expressed in body frame, so there is no need to transform it
 
-        # Compute desired force and moment
+        # Desired force and moment
         f = -kp*ep - kv*ev + m*g*e3 + m*ad  # Ideal force vector in world frame
         f_z = (f).dot(R * e3)[2]  # Project ideal force into body-frame Z-axis and take z-component
         M = -kR*eR - kW*eW + np.cross(W, J @ W) - J @ (hat_map(W) @ R.T @ Rd @ Wd - R.T @ Rd @ Ad)
