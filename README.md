@@ -14,9 +14,17 @@ Our recommended setup requires using a Linux machine, or using WSL2 on Windows, 
     `python` 3.10 or higher
     `pip` 23.3.1 or higher
 
-Install Dependencies:
+Install dependencies from `requiremnts.txt`:
 
     pip list --format=freeze > requirements.txt
+
+Or install manually:
+
+    pip install manipulation
+    pip install underactuated
+    pip install ipython
+    pip install pyvirtualdisplay
+
 
 ## Running
 
