@@ -3,7 +3,7 @@ Cool acrobatic drone (using the [Drake](https://drake.mit.edu/) simulator/toolbo
 
 ![](dronebackflip.gif)
 
-Controls of an underactuated quadrotor from any starting pose to "any" (6-DOF constrained) goal pose.
+Solves and tracks a trajectory for an underactuated quadrotor from a starting pose to "any" (6-DOF constrained) goal pose.
 
 Future work: Improve the iLQR-generated trajectories as they tend to be too aggressive for the poorly tuned Geometric SE(3) Controller, and seem to prefer straight lines due to cost function formulation.
 
