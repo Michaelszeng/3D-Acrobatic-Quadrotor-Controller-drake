@@ -114,7 +114,7 @@
 <text text-anchor="start" x="806.5" y="-518.8" font-family="Times,serif" font-size="14.00">plant_configuration</text>
 </g>
 <!-- s2&#45;&gt;s3 -->
-<g id="edge11" class="edge">
+<g id="edge9" class="edge">
 <title>s2:e&#45;&gt;s3:w</title>
 <path fill="none" stroke="black" d="M664.5,-543C722.24,-543 739.21,-543 792.17,-543"/>
 <polygon fill="black" stroke="black" points="792.5,-546.5 802.5,-543 792.5,-539.5 792.5,-546.5"/>
@@ -132,10 +132,10 @@
 <text text-anchor="start" x="1536.5" y="-297.8" font-family="Times,serif" font-size="14.00">body_poses</text>
 </g>
 <!-- s2&#45;&gt;s35 -->
-<g id="edge10" class="edge">
+<g id="edge8" class="edge">
 <title>s2:e&#45;&gt;s35:w</title>
-<path fill="none" stroke="black" d="M664.5,-396C1049.17,-396 1142.78,-302.66 1522.34,-301.02"/>
-<polygon fill="black" stroke="black" points="1522.51,-304.52 1532.5,-301 1522.49,-297.52 1522.51,-304.52"/>
+<path fill="none" stroke="black" d="M664.5,-396C1032.62,-396 1130.07,-398.77 1489,-317 1505.32,-313.28 1510.24,-305.04 1522.56,-302.08"/>
+<polygon fill="black" stroke="black" points="1522.94,-305.56 1532.5,-301 1522.18,-298.61 1522.94,-305.56"/>
 </g>
 <!-- s37 -->
 <g id="node5" class="node">
@@ -154,7 +154,7 @@
 <polygon fill="black" stroke="black" points="782.44,-245.34 792.5,-242 782.56,-238.34 782.44,-245.34"/>
 </g>
 <!-- s3&#45;&gt;s2 -->
-<g id="edge7" class="edge">
+<g id="edge10" class="edge">
 <title>s3:e&#45;&gt;s2:w</title>
 <path fill="none" stroke="black" d="M997.5,-533C1008.62,-533 1004.52,-515.7 996.5,-508 931.92,-445.95 880.65,-481.85 795,-508 731.45,-527.4 734.55,-572.1 671,-591.5 535.29,-632.93 133.86,-690.79 32.5,-591.5 20.11,-579.36 13.05,-555.35 22,-546.44"/>
 <polygon fill="black" stroke="black" points="23.29,-549.69 31.5,-543 20.91,-543.11 23.29,-549.69"/>
@@ -177,9 +177,9 @@
 <polygon fill="black" stroke="black" points="1161.51,-531.53 1171.5,-528 1161.49,-524.53 1161.51,-531.53"/>
 </g>
 <!-- s35&#45;&gt;s2 -->
-<g id="edge8" class="edge">
+<g id="edge11" class="edge">
 <title>s35:e&#45;&gt;s2:w</title>
-<path fill="none" stroke="black" d="M1727.5,-312C1738.4,-312 1734.36,-295.05 1726.5,-287.5 1661.9,-225.48 1614.47,-283.6 1525,-287.5 1433.85,-291.48 773.62,-296.66 707,-359 630.65,-430.44 750.39,-523.45 671,-591.5 617.13,-637.67 82.75,-641.58 32.5,-591.5 12.61,-571.68 2.48,-359.14 23.69,-318.65"/>
+<path fill="none" stroke="black" d="M1727.5,-312C1738.4,-312 1734.36,-295.05 1726.5,-287.5 1661.9,-225.48 1614.49,-284.18 1525,-287.5 1348.19,-294.06 1303.79,-296.93 1128,-317 939.89,-338.48 842.01,-249.27 707,-382 639.63,-448.23 743.24,-530.61 671,-591.5 616.75,-637.22 82.75,-641.58 32.5,-591.5 12.61,-571.68 2.48,-359.14 23.69,-318.65"/>
 <polygon fill="black" stroke="black" points="26.15,-321.15 31.5,-312 21.62,-315.81 26.15,-321.15"/>
 </g>
 <!-- s36 -->
@@ -199,7 +199,7 @@
 <text text-anchor="start" x="1139.5" y="-129.8" font-family="Times,serif" font-size="14.00">desired_angular_acceleration</text>
 </g>
 <!-- s36&#45;&gt;s35 -->
-<g id="edge9" class="edge">
+<g id="edge7" class="edge">
 <title>s36:e&#45;&gt;s35:w</title>
 <path fill="none" stroke="black" d="M1482.5,-165C1551.87,-165 1468.97,-305.88 1522.28,-320.74"/>
 <polygon fill="black" stroke="black" points="1522.15,-324.25 1532.5,-322 1523.01,-317.3 1522.15,-324.25"/>

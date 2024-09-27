@@ -7,10 +7,11 @@ from pydrake.all import (
 )
 import pydrake.symbolic as sym
 
-from typing import BinaryIO, Optional, Union, Tuple
+from typing import BinaryIO, Union
 import pydot
 import numpy as np
 from scipy.spatial.transform import Rotation
+import pickle
 
 np.set_printoptions(precision=3)
 
@@ -18,8 +19,8 @@ np.set_printoptions(precision=3)
 # Quadrotor Constants (derived from quadrotor MultibodyPlant)
 m = 0.775       # quadrotor mass
 L = 0.15        # distance from the center of mass to the center of each rotor in the b1, b2 plane
-kM = 1e-3       # relates moment applied to quadrotor to the thurst generated
-kF = 1          # Force input constant
+kM = 1e-2       # relates moment applied to quadrotor to the thurst generated
+kF = 1          # force input constant
 g = 9.81        # gravity
 J = np.array([[1.50000000e-03, 0.00000000e+00, 2.02795951e-16],
               [0.00000000e+00, 2.50000000e-03, 0.00000000e+00],
@@ -165,6 +166,47 @@ def convert_state(drone_state):
 
     drone_state_se3 = np.concatenate((x, v, R.flatten(), W))
     return drone_state_se3
+
+
+def save_trajectory_data(filename, x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error):
+    """
+    Be able to save/load the output of solve_trajectory() from a file so that I
+    do not need to continually run it during testing.
+    """
+    trajectory_data = {
+        'x_trj': x_trj,
+        'u_trj': u_trj,
+        'cost_trace': cost_trace,
+        'regu_trace': regu_trace,
+        'redu_ratio_trace': redu_ratio_trace,
+        'redu_trace': redu_trace,
+        'dt': dt,
+        'dt_array': dt_array,
+        'final_translation_error': final_translation_error,
+        'final_rotation_error': final_rotation_error
+    }
+    
+    with open(filename, 'wb') as f:
+        pickle.dump(trajectory_data, f)
+
+
+def load_trajectory_data(filename):
+    with open(filename, 'rb') as f:
+        trajectory_data = pickle.load(f)
+    
+    # Unpack the dictionary values and return them in the desired order
+    return (
+        trajectory_data['x_trj'],
+        trajectory_data['u_trj'],
+        trajectory_data['cost_trace'],
+        trajectory_data['regu_trace'],
+        trajectory_data['redu_ratio_trace'],
+        trajectory_data['redu_trace'],
+        trajectory_data['dt'],
+        trajectory_data['dt_array'],
+        trajectory_data['final_translation_error'],
+        trajectory_data['final_rotation_error']
+    )
 
 
 class StateConverter(LeafSystem):

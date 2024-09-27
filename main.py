@@ -23,6 +23,7 @@ from manipulation.meshcat_utils import AddMeshcatTriad
 
 import numpy as np
 import os
+import datetime
 import time
 import argparse
 
@@ -44,7 +45,7 @@ roll0 = 0
 pitch0 = 0
 yaw0 = 0
 
-pose_goal = np.array([1, 0, 1.5, 0.1, 0, 0])
+pose_goal = np.array([0, 0, 1.0, 0.001, 0, 0])
 
 
 ################################################################################
@@ -148,8 +149,11 @@ plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("base_link"), RigidTran
 ##### Run Trajectory Optimization
 ################################################################################
 # Solve for trajectory
-N=20  # Number of time steps in trajectory
-x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
+N=40  # Number of time steps in trajectory
+# x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
+# save_trajectory_data("trajectories/1.pkl", x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error)
+
+x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error = load_trajectory_data("trajectories/1.pkl")
 
 # print(f"{dt=}\n")
 # print(f"{dt_array=}\n")
@@ -327,6 +331,9 @@ meshcat.StartRecording()
 #     t += dt_array[i]
 #     simulator.AdvanceTo(t)
 
-# simulator.AdvanceTo(np.sum(dt_array) + 0.5)
-simulator.AdvanceTo(10)
+simulator.AdvanceTo(np.sum(dt_array) + 0.1)
+# simulator.AdvanceTo(10)
 meshcat.PublishRecording()
+
+date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+print(f"{date}: {meshcat.web_url()}/download")

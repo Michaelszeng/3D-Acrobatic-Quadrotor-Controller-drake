@@ -21,10 +21,16 @@ Note: W is w.r.t. body-fixed frame
 
 
 # Control gains
-kp = 10.0
-kv = 14.0
-kR = 10.0
-kW = 2.0
+# kp = 8.0
+# kv = 10.0
+# kR = 5.0
+# kW = 2.0
+
+kp = 2.0
+kv = 3.0
+kR = 5.0
+kW = 1.0
+
 
 class Controller(LeafSystem):
     def __init__(self, meshcat):
@@ -90,7 +96,6 @@ class Controller(LeafSystem):
         # Error Values
         ep = p - pd     # position error in inertial frame
         ev = v - vd     # velocity error in inertial frame
-        print(f"{ep=}")
 
         b3d = -kp*ep- kv*ev + m*g*e3 + m*ad
         b3d /= np.linalg.norm(b3d)
