@@ -1,4 +1,4 @@
-# 3D-Acrobatic-Quadrotor-Controller-drake
+# Acrobatic 6-DOF-Constrained iLQR Trajectory Optimization and Control for a Quadrotor
 Cool acrobatic drone (using the [Drake](https://drake.mit.edu/) simulator/toolbox, iLQR trajectory optimization, and [Geometric SE(3) Controller](https://ieeexplore.ieee.org/document/5717652)) by Michael Zeng and Spring Lin.
 
 ![](dronebackflip.gif)
