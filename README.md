@@ -16,7 +16,7 @@ Our recommended setup requires using a Linux machine, or using WSL2 on Windows, 
 
 Install Dependencies:
 
-    `pip list --format=freeze > requirements.txt`
+    pip list --format=freeze > requirements.txt
 
 ## Running
 
@@ -24,4 +24,4 @@ Adjust Parameters at the top of `main.py` as needed.
 
 Run using:
 
-    `python3 main.py`
+    python3 main.py
