@@ -26,10 +26,10 @@ Note: W is w.r.t. body-fixed frame
 # kR = 5.0
 # kW = 2.0
 
-kp = 2.0
-kv = 3.0
-kR = 5.0
-kW = 1.0
+kp = 50.0
+kv = 50.0
+kR = 0.5
+kW = 2.0
 
 
 class Controller(LeafSystem):
@@ -46,7 +46,7 @@ class Controller(LeafSystem):
         self.input_port_desired_acceleration = self.DeclareVectorInputPort("desired_acceleration", 3)
 
         # Define input port for the desired angular acceleration from the DDP trajectory
-        self.input_port_desired_acceleration = self.DeclareVectorInputPort("desired_angular_acceleration", 3)
+        self.input_port_desired_angular_acceleration = self.DeclareVectorInputPort("desired_angular_acceleration", 3)
         
         # Define output port for the controller output
         self.output_port_controller_output = self.DeclareVectorOutputPort("controller_output",
@@ -71,6 +71,7 @@ class Controller(LeafSystem):
         # print(desired_state)
         desired_accel = self.input_port_desired_acceleration.Eval(context)
         # print(desired_accel)
+        desired_angular_accel = self.input_port_desired_angular_acceleration.Eval(context)
 
         if not np.all(np.isclose(desired_state, self.prev_desired_state)):
             AddMeshcatTriad(self.meshcat, f"Triads/Desired_State_t={context.get_time()}", X_PT=RigidTransform(RotationMatrix(desired_state[6:15].reshape((3,3))), desired_state[:3]), opacity=0.5)
@@ -91,7 +92,8 @@ class Controller(LeafSystem):
         vd = desired_state[3:6]                     # desired velocity in inertial frame
         ad = desired_accel                          # desired accel in inertial frame
         yawd = np.arctan2(desired_state[9], desired_state[6])  # desired yaw = arctan(R_21 / R_11)
-        Wd = R.T @ desired_state[15:]                     # desired angular velocity in body frame (convert from inertial to body frame)
+        Wd = R.T @ desired_state[15:]               # desired angular velocity in body frame (convert from inertial to body frame)
+        Ad = R.T @ desired_angular_accel                  # desired angular acceleration in body frame (convert from inertial to body frame)
 
         # Error Values
         ep = p - pd     # position error in inertial frame
@@ -111,7 +113,7 @@ class Controller(LeafSystem):
         # Compute desired force and moment
         f = -kp*ep - kv*ev + m*g*e3 + m*ad  # Ideal force vector in world frame
         f_z = (f).dot(R * e3)[2]  # Project ideal force into body-frame Z-axis and take z-component
-        M = -kR*eR - kW*eW + np.cross(W, J @ W)
+        M = -kR*eR - kW*eW + np.cross(W, J @ W) - J @ (hat_map(W) @ R.T @ Rd @ Wd - R.T @ Rd @ Ad)
 
         # Backsolve rotor velocities from desired force and moment
         u = np.linalg.inv(F2W) @ np.concatenate(([f_z], M))

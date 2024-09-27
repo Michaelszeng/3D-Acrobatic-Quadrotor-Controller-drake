@@ -45,7 +45,7 @@ roll0 = 0
 pitch0 = 0
 yaw0 = 0
 
-pose_goal = np.array([0, 0, 1.0, 0.001, 0, 0])
+pose_goal = np.array([1.0, 0, 1.0, 0.001, 0, 0])
 
 
 ################################################################################
@@ -151,9 +151,9 @@ plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("base_link"), RigidTran
 # Solve for trajectory
 N=40  # Number of time steps in trajectory
 # x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error = solve_trajectory(plant.get_state_output_port().Eval(plant_context), pose_goal, N)
-# save_trajectory_data("trajectories/1.pkl", x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error)
+# save_trajectory_data("trajectories/2.pkl", x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error)
 
-x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error = load_trajectory_data("trajectories/1.pkl")
+x_trj, u_trj, cost_trace, regu_trace, redu_ratio_trace, redu_trace, dt, dt_array, final_translation_error, final_rotation_error = load_trajectory_data("trajectories/2.pkl")
 
 # print(f"{dt=}\n")
 # print(f"{dt_array=}\n")
@@ -334,6 +334,7 @@ meshcat.StartRecording()
 simulator.AdvanceTo(np.sum(dt_array) + 0.1)
 # simulator.AdvanceTo(10)
 meshcat.PublishRecording()
+time.sleep(5)
 
 date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 print(f"{date}: {meshcat.web_url()}/download")
