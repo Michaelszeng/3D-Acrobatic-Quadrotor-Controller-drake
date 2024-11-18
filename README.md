@@ -12,8 +12,7 @@ Cool acrobatic drone (using the [Drake](https://drake.mit.edu/) simulator/toolbo
 
 <sub><sup>[2] T. Lee, M. Leok and N. H. McClamroch, "Geometric tracking control of a quadrotor UAV on SE(3)," 49th IEEE Conference on Decision and Control (CDC), Atlanta, GA, USA, 2010, pp. 5420-5425, doi: 10.1109/CDC.2010.5717652. keywords: {Unmanned aerial vehicles;Stability analysis;Attitude control;Asymptotic stability;Propellers;Trajectory;Rotors}</sup></sub>
 
-##
-Future work: 
+## Future work: 
 - Improve the iLQR cost formulation as trajectories tend to be too aggressive and prefer straight lines
 - Tuning the Geometric SE(3) controller
 
@@ -25,7 +24,7 @@ Our recommended setup requires using a Linux machine, or using WSL2 on Windows, 
     `python` 3.10 or higher
     `pip` 23.3.1 or higher
 
-Install dependencies from `requiremnts.txt`:
+Install dependencies from `requirements.txt`:
 
     pip list --format=freeze > requirements.txt
 
