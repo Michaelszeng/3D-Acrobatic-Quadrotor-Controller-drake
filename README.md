@@ -30,6 +30,7 @@ Install dependencies from `requirements.txt`:
 
 Or install manually:
 
+    pip install numpy
     pip install manipulation
     pip install underactuated
     pip install ipython
