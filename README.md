@@ -15,6 +15,7 @@ Cool acrobatic drone (using the [Drake](https://drake.mit.edu/) simulator/toolbo
 ## Future work: 
 - Improve the iLQR cost formulation as trajectories tend to be too aggressive and prefer straight lines
 - Tuning the Geometric SE(3) controller
+- Sidenote: one of the greatest advantages of iLQR is its iterative (and therefore, easily warm-startable) nature, thus making it fit for real-time planning with algorithms like MPC. We currently don't take advantage of that in this project, though implementing real-time replanning would be a worthy future goal.
 
 
 ## Installation
